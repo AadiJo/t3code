@@ -11,7 +11,7 @@ import type {
 } from "@t3tools/contracts";
 import { useCallback, useEffect, useId, useRef } from "react";
 
-import { ensureEnvironmentApi } from "~/environmentApi";
+import { readEnvironmentApi } from "~/environmentApi";
 import { selectThreadPreviewState, usePreviewStateStore } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { resolveBrowserNavigationTarget } from "~/browser/browserTargetResolver";
@@ -128,7 +128,14 @@ export function PreviewAutomationOwner(props: {
         error.name = "PreviewAutomationUnavailableError";
         throw error;
       }
-      const api = ensureEnvironmentApi(threadRef.environmentId);
+      const api = readEnvironmentApi(threadRef.environmentId);
+      if (!api) {
+        const error = new Error(
+          `Environment API not found for environment ${threadRef.environmentId}`,
+        );
+        error.name = "PreviewAutomationUnavailableError";
+        throw error;
+      }
       const state = selectThreadPreviewState(
         usePreviewStateStore.getState().byThreadKey,
         threadRef,
@@ -235,7 +242,10 @@ export function PreviewAutomationOwner(props: {
   }, [handleRequest]);
 
   useEffect(() => {
-    const api = ensureEnvironmentApi(threadRef.environmentId);
+    const api = readEnvironmentApi(threadRef.environmentId);
+    if (!api) {
+      return;
+    }
     return api.preview.automation.connect(
       { clientId: automationClientId },
       (request) => {
@@ -276,7 +286,10 @@ export function PreviewAutomationOwner(props: {
   }, [automationClientId, threadRef.environmentId]);
 
   useEffect(() => {
-    const api = ensureEnvironmentApi(threadRef.environmentId);
+    const api = readEnvironmentApi(threadRef.environmentId);
+    if (!api) {
+      return;
+    }
     const report = () => {
       const state = selectThreadPreviewState(
         usePreviewStateStore.getState().byThreadKey,
