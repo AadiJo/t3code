@@ -5,6 +5,8 @@ import { cn } from "~/lib/utils";
 import { formatProviderDriverKindLabel } from "../../providerModels";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
+const PROVIDER_STATUS_PENDING_MESSAGE = "provider status has not been checked in this session yet";
+
 export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   status,
 }: {
@@ -15,6 +17,10 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   }
 
   const providerName = status.displayName?.trim() || formatProviderDriverKindLabel(status.driver);
+  if (status.message?.toLowerCase().includes(PROVIDER_STATUS_PENDING_MESSAGE)) {
+    return null;
+  }
+
   const isUnauthenticated = status.status === "error" && status.auth.status === "unauthenticated";
   const title = isUnauthenticated
     ? `${providerName} is unauthenticated`

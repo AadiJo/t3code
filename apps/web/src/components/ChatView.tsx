@@ -1149,6 +1149,7 @@ function ChatViewContent(props: ChatViewProps) {
   const localComposerRef = useRef<ChatComposerHandle | null>(null);
   const composerRef = useComposerHandleContext() ?? localComposerRef;
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [renderScrollToBottom, setRenderScrollToBottom] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
@@ -3208,7 +3209,22 @@ function ChatViewContent(props: ChatViewProps) {
   // thread switches.  LegendList fires scroll events with isAtEnd=false while
   // initialScrollAtEnd is settling; hiding is always immediate.
   const showScrollDebouncer = useRef(
-    new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
+    new Debouncer(
+      () => {
+        const scrollport = document.querySelector(".timeline-scrollport");
+        if (scrollport instanceof HTMLElement) {
+          const maxScrollTop = scrollport.scrollHeight - scrollport.clientHeight;
+          const distanceFromBottom = maxScrollTop - scrollport.scrollTop;
+          if (maxScrollTop <= 8 || distanceFromBottom <= 8) {
+            isAtEndRef.current = true;
+            setShowScrollToBottom(false);
+            return;
+          }
+        }
+        setShowScrollToBottom(true);
+      },
+      { wait: 150 },
+    ),
   );
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
     if (isAtEndRef.current === isAtEnd) return;
@@ -3220,6 +3236,21 @@ function ChatViewContent(props: ChatViewProps) {
       showScrollDebouncer.current.maybeExecute();
     }
   }, []);
+
+  useEffect(() => {
+    if (showScrollToBottom) {
+      setRenderScrollToBottom(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRenderScrollToBottom(false);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [showScrollToBottom]);
 
   useEffect(() => {
     setPullRequestDialogState(null);
@@ -4678,12 +4709,15 @@ function ChatViewContent(props: ChatViewProps) {
               />
 
               {/* scroll to bottom pill — shown when user has scrolled away from the bottom */}
-              {showScrollToBottom && (
-                <div className="pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5">
+              {renderScrollToBottom && (
+                <div
+                  className="scroll-to-bottom-control pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5"
+                  data-state={showScrollToBottom ? "entering" : "exiting"}
+                >
                   <button
                     type="button"
                     onClick={() => scrollToEnd(true)}
-                    className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
+                    className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-white/8 bg-[#1d1d1d] px-3 py-1 text-xs text-white/70 opacity-100 shadow-[0_12px_30px_-16px_rgb(0_0_0/0.9),0_1px_0_rgb(255_255_255/0.06)_inset] transition-[border-color,color,transform,box-shadow] duration-180 ease-[var(--motion-ease-out)] hover:-translate-y-px hover:border-white/14 hover:text-white hover:cursor-pointer active:translate-y-0"
                   >
                     <ChevronDownIcon className="size-3.5" />
                     Scroll to bottom

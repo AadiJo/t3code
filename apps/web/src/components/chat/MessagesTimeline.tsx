@@ -382,7 +382,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           maintainScrollAtEndThreshold={0.1}
           maintainVisibleContentPosition
           onScroll={handleScroll}
-          className="scrollbar-gutter-both h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
+          className="timeline-scrollport scrollbar-gutter-both h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
           ListHeaderComponent={TIMELINE_LIST_HEADER}
           ListFooterComponent={TIMELINE_LIST_FOOTER}
         />
