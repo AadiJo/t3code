@@ -307,6 +307,9 @@ export function deriveActiveWorkStartedAt(
   session: SessionActivityState | null,
   sendStartedAt: string | null,
 ): string | null {
+  if (sendStartedAt) {
+    return sendStartedAt;
+  }
   const runningTurnId =
     session?.orchestrationStatus === "running" ? (session.activeTurnId ?? null) : null;
   if (runningTurnId !== null) {

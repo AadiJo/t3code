@@ -67,7 +67,12 @@ export type MessagesTimelineRow =
       createdAt: string;
       proposedPlan: ProposedPlan;
     }
-  | { kind: "working"; id: string; createdAt: string | null };
+  | {
+      kind: "working";
+      id: string;
+      createdAt: string | null;
+      phase: "starting" | "running";
+    };
 
 export interface StableMessagesTimelineRowsState {
   byId: Map<string, MessagesTimelineRow>;
@@ -160,6 +165,15 @@ function deriveUnsettledTurnId(latestTurn: TimelineLatestTurn | null): TurnId | 
   }
   const isSettled = latestTurn.completedAt !== null && latestTurn.state !== "running";
   return isSettled ? null : latestTurn.turnId;
+}
+
+function deriveWorkingPhase(
+  latestTurn: TimelineLatestTurn | null | undefined,
+): "starting" | "running" {
+  if (latestTurn?.startedAt && latestTurn.completedAt === null && latestTurn.state === "running") {
+    return "running";
+  }
+  return "starting";
 }
 
 /**
@@ -418,6 +432,7 @@ export function deriveMessagesTimelineRows(input: {
       kind: "working",
       id: "working-indicator-row",
       createdAt: input.activeTurnStartedAt,
+      phase: deriveWorkingPhase(input.latestTurn),
     });
   }
 
@@ -450,7 +465,7 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
   switch (a.kind) {
     case "working":
-      return a.createdAt === (b as typeof a).createdAt;
+      return a.createdAt === (b as typeof a).createdAt && a.phase === (b as typeof a).phase;
 
     case "turn-fold": {
       const bf = b as typeof a;

@@ -677,6 +677,12 @@ describe("deriveMessagesTimelineRows", () => {
     ]);
     const finalRow = rows.find((row) => row.id === "assistant-final-entry");
     expect(finalRow?.kind === "message" && finalRow.showAssistantMeta).toBe(true);
+    const workingRow = rows.find((row) => row.id === "working-indicator-row");
+    expect(workingRow).toMatchObject({
+      kind: "working",
+      createdAt: "2026-01-01T00:01:00Z",
+      phase: "starting",
+    });
   });
 
   it("does not fold the active in-progress turn", () => {
@@ -727,6 +733,12 @@ describe("deriveMessagesTimelineRows", () => {
       "work-entry-1",
       "working-indicator-row",
     ]);
+    const workingRow = rows.find((row) => row.id === "working-indicator-row");
+    expect(workingRow).toMatchObject({
+      kind: "working",
+      createdAt: "2026-01-01T00:00:00Z",
+      phase: "running",
+    });
   });
 
   it("only shows assistant metadata on the terminal assistant message", () => {

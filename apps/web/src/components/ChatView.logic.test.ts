@@ -823,7 +823,7 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     ).toBe(true);
   });
 
-  it("clears local dispatch when the session changes without an observed running phase", () => {
+  it("keeps local dispatch when session metadata changes before the new turn starts", () => {
     const localDispatch = createLocalDispatchSnapshot({
       id: ThreadId.make("thread-1"),
       environmentId: localEnvironmentId,
@@ -860,6 +860,6 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
         hasPendingUserInput: false,
         threadError: null,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

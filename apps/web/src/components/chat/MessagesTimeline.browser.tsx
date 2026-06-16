@@ -236,6 +236,48 @@ describe("MessagesTimeline", () => {
     }
   });
 
+  it("labels locally dispatched work as starting until the provider turn begins", async () => {
+    const props = buildProps();
+    const startedAt = new Date().toISOString();
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        isWorking
+        activeTurnStartedAt={startedAt}
+        timelineEntries={[]}
+        latestTurn={{
+          turnId: "turn-previous" as never,
+          state: "completed",
+          startedAt: "2026-04-13T12:00:00.000Z",
+          completedAt: "2026-04-13T12:00:01.000Z",
+        }}
+      />,
+    );
+
+    try {
+      await expect.element(page.getByText("Starting request for", { exact: false })).toBeVisible();
+
+      await screen.rerender(
+        <MessagesTimeline
+          {...props}
+          isWorking
+          activeTurnStartedAt={startedAt}
+          timelineEntries={[]}
+          latestTurn={{
+            turnId: "turn-next" as never,
+            state: "running",
+            startedAt,
+            completedAt: null,
+          }}
+        />,
+      );
+
+      await expect.element(page.getByText("Working for", { exact: false })).toBeVisible();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
   it("starts long user messages collapsed by default", async () => {
     const screen = await render(
       <MessagesTimeline

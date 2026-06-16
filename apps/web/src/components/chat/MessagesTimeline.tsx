@@ -661,6 +661,8 @@ function ProposedPlanTimelineRow({
 }
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
+  const label = row.phase === "running" ? "Working" : "Starting request";
+
   return (
     <div className="py-0.5 pl-1.5">
       <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70 tabular-nums">
@@ -672,10 +674,10 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
         <span>
           {row.createdAt ? (
             <>
-              Working for <WorkingTimer createdAt={row.createdAt} />
+              {label} for <WorkingTimer createdAt={row.createdAt} />
             </>
           ) : (
-            "Working..."
+            `${label}...`
           )}
         </span>
       </div>

@@ -157,6 +157,7 @@ import {
   type TerminalContextSelection,
 } from "../lib/terminalContext";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
+import { selectLocalDispatchSnapshot, useLocalDispatchStore } from "../localDispatchStore";
 import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../terminalSessionState";
 import {
   appendElementContextsToPrompt,
@@ -186,7 +187,6 @@ import {
   getStartedThreadModelChangeBlockReason,
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
-  type LocalDispatchSnapshot,
   PullRequestDialogState,
   cloneComposerImageForRetry,
   deriveLockedProvider,
@@ -433,6 +433,7 @@ interface TerminalLaunchContext {
 type PersistentTerminalLaunchContext = Pick<TerminalLaunchContext, "cwd" | "worktreePath">;
 
 function useLocalDispatchState(input: {
+  activeThreadRef: ScopedThreadRef | null;
   activeThread: Thread | undefined;
   activeLatestTurn: Thread["latestTurn"] | null;
   phase: SessionPhase;
@@ -440,26 +441,27 @@ function useLocalDispatchState(input: {
   activePendingUserInput: ApprovalRequestId | null;
   threadError: string | null | undefined;
 }) {
-  const [localDispatch, setLocalDispatch] = useState<LocalDispatchSnapshot | null>(null);
+  const localDispatch = useLocalDispatchStore((state) =>
+    selectLocalDispatchSnapshot(state.byThreadKey, input.activeThreadRef),
+  );
+  const beginDispatch = useLocalDispatchStore((state) => state.begin);
+  const clearDispatch = useLocalDispatchStore((state) => state.clear);
 
   const beginLocalDispatch = useCallback(
     (options?: { preparingWorktree?: boolean }) => {
-      const preparingWorktree = Boolean(options?.preparingWorktree);
-      setLocalDispatch((current) => {
-        if (current) {
-          return current.preparingWorktree === preparingWorktree
-            ? current
-            : { ...current, preparingWorktree };
-        }
-        return createLocalDispatchSnapshot(input.activeThread, options);
-      });
+      if (!input.activeThreadRef) return;
+      beginDispatch(
+        input.activeThreadRef,
+        createLocalDispatchSnapshot(input.activeThread, options),
+      );
     },
-    [input.activeThread],
+    [beginDispatch, input.activeThread, input.activeThreadRef],
   );
 
   const resetLocalDispatch = useCallback(() => {
-    setLocalDispatch(null);
-  }, []);
+    if (!input.activeThreadRef) return;
+    clearDispatch(input.activeThreadRef);
+  }, [clearDispatch, input.activeThreadRef]);
 
   const serverAcknowledgedLocalDispatch = useMemo(
     () =>
@@ -1903,6 +1905,7 @@ function ChatViewContent(props: ChatViewProps) {
     isPreparingWorktree,
     isSendBusy,
   } = useLocalDispatchState({
+    activeThreadRef,
     activeThread,
     activeLatestTurn,
     phase,
@@ -3294,16 +3297,23 @@ function ChatViewContent(props: ChatViewProps) {
     };
   }, [activeThread?.id, activeThread?.messages, handoffAttachmentPreviews, optimisticUserMessages]);
 
+  const previousCleanupThreadIdRef = useRef<ThreadId | null>(null);
   useEffect(() => {
+    const nextThreadId = activeThread?.id ?? null;
+    const previousThreadId = previousCleanupThreadIdRef.current;
+    previousCleanupThreadIdRef.current = nextThreadId;
+    if (previousThreadId === nextThreadId) {
+      return;
+    }
+
     setOptimisticUserMessages((existing) => {
       for (const message of existing) {
         revokeUserMessagePreviewUrls(message);
       }
       return [];
     });
-    resetLocalDispatch();
     setExpandedImage(null);
-  }, [draftId, resetLocalDispatch, threadId]);
+  }, [activeThread?.id]);
 
   const closeExpandedImage = useCallback(() => {
     setExpandedImage(null);

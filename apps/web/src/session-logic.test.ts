@@ -1631,7 +1631,7 @@ describe("deriveActiveWorkStartedAt", () => {
     completedAt: "2026-02-27T21:10:06.000Z",
   } as const;
 
-  it("prefers the in-flight turn start when the latest turn is not settled", () => {
+  it("prefers the local send start when the latest turn is running", () => {
     expect(
       deriveActiveWorkStartedAt(
         latestTurn,
@@ -1640,6 +1640,19 @@ describe("deriveActiveWorkStartedAt", () => {
           activeTurnId: TurnId.make("turn-1"),
         },
         "2026-02-27T21:11:00.000Z",
+      ),
+    ).toBe("2026-02-27T21:11:00.000Z");
+  });
+
+  it("uses the in-flight turn start for recovered running sessions without a local send start", () => {
+    expect(
+      deriveActiveWorkStartedAt(
+        latestTurn,
+        {
+          orchestrationStatus: "running",
+          activeTurnId: TurnId.make("turn-1"),
+        },
+        null,
       ),
     ).toBe("2026-02-27T21:10:00.000Z");
   });
