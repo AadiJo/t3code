@@ -88,6 +88,7 @@ import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as BootstrapTurnStartDispatcher from "./orchestration/Services/BootstrapTurnStartDispatcher.ts";
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import { PersistenceSqlError } from "./persistence/Errors.ts";
 import {
@@ -539,6 +540,22 @@ const buildAppUnderTest = (options?: {
           ...options.layers.vcsStatusBroadcaster,
         })
       : VcsStatusBroadcaster.layer.pipe(Layer.provide(gitWorkflowLayer));
+    const projectSetupScriptRunnerLayer = Layer.mock(ProjectSetupScriptRunner)({
+      runForThread: () => Effect.succeed({ status: "no-script" as const }),
+      ...options?.layers?.projectSetupScriptRunner,
+    });
+    const orchestrationEngineLayer = Layer.mock(OrchestrationEngineService)({
+      readEvents: () => Stream.empty,
+      dispatch: () => Effect.succeed({ sequence: 0 }),
+      streamDomainEvents: Stream.empty,
+      ...options?.layers?.orchestrationEngine,
+    });
+    const bootstrapTurnStartDispatcherLayer = BootstrapTurnStartDispatcher.layer.pipe(
+      Layer.provideMerge(gitWorkflowLayer),
+      Layer.provideMerge(vcsStatusBroadcasterLayer),
+      Layer.provideMerge(projectSetupScriptRunnerLayer),
+      Layer.provideMerge(orchestrationEngineLayer),
+    );
 
     const servedRoutesLayer = HttpRouter.serve(makeRoutesLayer, {
       disableListenLog: true,
@@ -657,11 +674,14 @@ const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provideMerge(vcsStatusBroadcasterLayer),
-      Layer.provide(
-        Layer.mock(ProjectSetupScriptRunner)({
-          runForThread: () => Effect.succeed({ status: "no-script" as const }),
-          ...options?.layers?.projectSetupScriptRunner,
-        }),
+      Layer.provide(projectSetupScriptRunnerLayer),
+    );
+
+    const servedRoutesWithBootstrapLayer = servedRoutesLayer.pipe(
+      Layer.provideMerge(
+        BootstrapTurnStartDispatcher.ActiveBootstrapTurnStartDispatcherLive.pipe(
+          Layer.provide(bootstrapTurnStartDispatcherLayer),
+        ),
       ),
       Layer.provide(
         Layer.mock(TerminalManager)({
@@ -691,14 +711,7 @@ const buildAppUnderTest = (options?: {
           }),
         ),
       ),
-      Layer.provide(
-        Layer.mock(OrchestrationEngineService)({
-          readEvents: () => Stream.empty,
-          dispatch: () => Effect.succeed({ sequence: 0 }),
-          streamDomainEvents: Stream.empty,
-          ...options?.layers?.orchestrationEngine,
-        }),
-      ),
+      Layer.provide(orchestrationEngineLayer),
       Layer.provide(
         Layer.mock(ProjectionSnapshotQuery)({
           getCommandReadModel: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
@@ -749,7 +762,7 @@ const buildAppUnderTest = (options?: {
       ),
     );
 
-    const appLayer = servedRoutesLayer.pipe(
+    const appLayer = servedRoutesWithBootstrapLayer.pipe(
       Layer.provide(
         Layer.mock(BrowserTraceCollector)({
           record: () => Effect.void,
@@ -4210,7 +4223,10 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.deepEqual(first.config.keybindings, []);
         assert.deepEqual(first.config.issues, []);
         assert.deepEqual(first.config.providers, providers);
-        assert.equal(first.config.observability.logsDirectoryPath.endsWith("/logs"), true);
+        assert.equal(
+          first.config.observability.logsDirectoryPath.replaceAll("\\", "/").endsWith("/logs"),
+          true,
+        );
         assert.equal(first.config.observability.localTracingEnabled, true);
         assert.equal(first.config.observability.otlpTracesUrl, "http://localhost:4318/v1/traces");
         assert.equal(first.config.observability.otlpTracesEnabled, true);
@@ -4469,10 +4485,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
 
       assertTrue(result._tag === "Failure");
       assertTrue(result.failure._tag === "ProjectSearchEntriesError");
-      assertInclude(
-        result.failure.message,
-        "Workspace root does not exist: /definitely/not/a/real/workspace/path",
-      );
+      const normalizedMessage = result.failure.message.replaceAll("\\", "/");
+      assertInclude(normalizedMessage, "Workspace root does not exist:");
+      assertInclude(normalizedMessage, "definitely/not/a/real/workspace/path");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
