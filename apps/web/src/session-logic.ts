@@ -699,6 +699,12 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       ? payload.detail
       : null;
   const taskLabel = taskSummary || taskDetailAsLabel;
+  const runtimeMessage =
+    (activity.kind === "runtime.error" || activity.kind === "runtime.warning") &&
+    typeof payload?.message === "string" &&
+    payload.message.length > 0
+      ? payload.message
+      : null;
   const detail = isTaskActivity
     ? !taskDetailAsLabel &&
       payload &&
@@ -712,7 +718,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     id: activity.id,
     createdAt: activity.createdAt,
     turnId: activity.turnId,
-    label: taskLabel || activity.summary,
+    label: runtimeMessage || taskLabel || activity.summary,
     tone:
       activity.kind === "task.progress"
         ? "thinking"

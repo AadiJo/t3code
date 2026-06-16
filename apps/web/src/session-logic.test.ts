@@ -1448,6 +1448,32 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["tool-1-complete", "tool-2-complete"]);
   });
 
+  it("uses runtime error payload messages as visible work log labels", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "runtime-error-auth",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "runtime.error",
+        tone: "error",
+        summary: "Runtime error",
+        payload: {
+          message:
+            "Your access token could not be refreshed because your refresh token was revoked.",
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "runtime-error-auth",
+      label: "Your access token could not be refreshed because your refresh token was revoked.",
+      sourceActivityKind: "runtime.error",
+      tone: "error",
+    });
+  });
+
   it("collapses same-timestamp lifecycle rows even when completed sorts before updated by id", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

@@ -801,6 +801,53 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
     }),
   );
 
+  it.effect(
+    "maps codex app-server error notifications to runtime.error with the upstream message",
+    () =>
+      Effect.gen(function* () {
+        const { adapter, runtime } = yield* startLifecycleRuntime();
+        const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+        yield* runtime.emit({
+          id: asEventId("evt-codex-auth-error"),
+          kind: "notification",
+          provider: ProviderDriverKind.make("codex"),
+          threadId: asThreadId("thread-1"),
+          createdAt: "2026-01-01T00:00:00.000Z",
+          method: "error",
+          turnId: asTurnId("turn-1"),
+          payload: {
+            error: {
+              message:
+                "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
+              codexErrorInfo: "unauthorized",
+              additionalDetails: null,
+            },
+            willRetry: false,
+            threadId: "thread-1",
+            turnId: "turn-1",
+          },
+        } satisfies ProviderEvent);
+
+        const firstEvent = yield* Fiber.join(firstEventFiber);
+
+        assert.equal(firstEvent._tag, "Some");
+        if (firstEvent._tag !== "Some") {
+          return;
+        }
+        assert.equal(firstEvent.value.type, "runtime.error");
+        if (firstEvent.value.type !== "runtime.error") {
+          return;
+        }
+        assert.equal(firstEvent.value.turnId, "turn-1");
+        assert.equal(firstEvent.value.payload.class, "provider_error");
+        assert.equal(
+          firstEvent.value.payload.message,
+          "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
+        );
+      }),
+  );
+
   it.effect("preserves request type when mapping serverRequest/resolved", () =>
     Effect.gen(function* () {
       const { adapter, runtime } = yield* startLifecycleRuntime();
