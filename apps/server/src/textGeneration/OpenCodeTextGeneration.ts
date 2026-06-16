@@ -375,6 +375,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       stagedSummary: input.stagedSummary,
       stagedPatch: input.stagedPatch,
       includeBranch: input.includeBranch === true,
+      customInstructions: input.customInstructions,
     });
     const generated = yield* runOpenCodeJson({
       operation: "generateCommitMessage",

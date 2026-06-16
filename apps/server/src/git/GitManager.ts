@@ -1098,6 +1098,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       includeBranch?: boolean;
       filePaths?: readonly string[];
       modelSelection: ModelSelection;
+      customInstructions?: string;
     }) {
       const context = yield* gitCore.prepareCommitContext(input.cwd, input.filePaths);
       if (!context) {
@@ -1124,6 +1125,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
           modelSelection: input.modelSelection,
+          ...(input.customInstructions ? { customInstructions: input.customInstructions } : {}),
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -1144,6 +1146,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
     filePaths?: readonly string[],
+    customInstructions?: string,
     progressReporter?: GitActionProgressReporter,
     actionId?: string,
   ) {
@@ -1173,6 +1176,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         ...(commitMessage ? { commitMessage } : {}),
         ...(filePaths ? { filePaths } : {}),
         modelSelection,
+        ...(customInstructions ? { customInstructions } : {}),
       });
     }
     if (!suggestion) {
@@ -1565,6 +1569,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
+    customInstructions?: string,
   ) {
     const suggestion = yield* resolveCommitAndBranchSuggestion({
       cwd,
@@ -1573,6 +1578,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
       ...(filePaths ? { filePaths } : {}),
       includeBranch: true,
       modelSelection,
+      ...(customInstructions ? { customInstructions } : {}),
     });
     if (!suggestion) {
       return yield* gitManagerError(
@@ -1653,12 +1659,16 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         let commitMessageForStep = input.commitMessage;
         let preResolvedCommitSuggestion: CommitAndBranchSuggestion | undefined = undefined;
 
-        const modelSelection = yield* serverSettingsService.getSettings.pipe(
-          Effect.map((settings) => settings.textGenerationModelSelection),
+        const textGenerationSettings = yield* serverSettingsService.getSettings.pipe(
+          Effect.map((settings) => ({
+            modelSelection: settings.textGenerationModelSelection,
+            commitMessageInstructions: settings.commitMessageInstructions,
+          })),
           Effect.mapError((cause) =>
             gitManagerError("runStackedAction", "Failed to get server settings.", cause),
           ),
         );
+        const { modelSelection, commitMessageInstructions } = textGenerationSettings;
 
         if (input.featureBranch) {
           yield* Ref.set(currentPhase, Option.some("branch"));
@@ -1673,6 +1683,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
             initialStatus.branch,
             input.commitMessage,
             input.filePaths,
+            commitMessageInstructions,
           );
           branchStep = result.branchStep;
           commitMessageForStep = result.resolvedCommitMessage;
@@ -1701,6 +1712,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
                   commitMessageForStep,
                   preResolvedCommitSuggestion,
                   input.filePaths,
+                  commitMessageInstructions,
                   options?.progressReporter,
                   progress.actionId,
                 ),

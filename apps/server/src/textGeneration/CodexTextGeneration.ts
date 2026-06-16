@@ -306,6 +306,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       stagedSummary: input.stagedSummary,
       stagedPatch: input.stagedPatch,
       includeBranch: input.includeBranch === true,
+      customInstructions: input.customInstructions,
     });
 
     const generated = yield* runCodexJson({

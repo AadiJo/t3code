@@ -271,6 +271,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       stagedSummary: input.stagedSummary,
       stagedPatch: input.stagedPatch,
       includeBranch: input.includeBranch === true,
+      customInstructions: input.customInstructions,
     });
 
     const generated = yield* runClaudeJson({

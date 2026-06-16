@@ -177,6 +177,7 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
       stagedSummary: input.stagedSummary,
       stagedPatch: input.stagedPatch,
       includeBranch: input.includeBranch === true,
+      customInstructions: input.customInstructions,
     });
 
     const generated = yield* runGrokJson({

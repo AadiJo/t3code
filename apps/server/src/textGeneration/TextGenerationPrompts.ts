@@ -27,6 +27,7 @@ export interface CommitMessagePromptInput {
   stagedPatch: string;
   includeBranch: boolean;
   policy?: TextGenerationPolicy | undefined;
+  customInstructions?: string | undefined;
 }
 
 export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
@@ -45,6 +46,7 @@ export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
       : []),
     "- capture the primary user-visible or developer-visible change",
     ...policyInstruction(input.policy?.commitInstructions),
+    ...policyInstruction(input.customInstructions),
     "",
     `Branch: ${input.branch ?? "(detached)"}`,
     "",

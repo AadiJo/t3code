@@ -49,6 +49,19 @@ describe("buildCommitMessagePrompt", () => {
 
     expect(result.prompt).toContain("Branch: (detached)");
   });
+
+  it("includes custom commit message instructions", () => {
+    const result = buildCommitMessagePrompt({
+      branch: "main",
+      stagedSummary: "M package.json",
+      stagedPatch: "diff",
+      includeBranch: false,
+      customInstructions: "Always use lowercase conventional commit prefixes.",
+    });
+
+    expect(result.prompt).toContain("Additional instructions:");
+    expect(result.prompt).toContain("Always use lowercase conventional commit prefixes.");
+  });
 });
 
 describe("buildPrContentPrompt", () => {

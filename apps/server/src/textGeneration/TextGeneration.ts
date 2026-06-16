@@ -19,6 +19,8 @@ export interface CommitMessageGenerationInput {
   stagedPatch: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
+  /** Optional user-authored guidance to include when generating commit messages. */
+  customInstructions?: string | undefined;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;
 }

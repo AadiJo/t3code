@@ -382,6 +382,7 @@ export const ServerSettings = Schema.Struct({
       }),
     ),
   ),
+  commitMessageInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 
   // Legacy single-instance-per-driver settings. Continues to be the source
   // of truth until `providerInstances` (below) lands per-driver migration
@@ -483,6 +484,7 @@ export const ServerSettingsPatch = Schema.Struct({
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  commitMessageInstructions: Schema.optionalKey(TrimmedString),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),

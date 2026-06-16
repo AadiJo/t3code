@@ -1,7 +1,7 @@
 import { ArchiveIcon, ArchiveX, LoaderIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   defaultInstanceIdForDriver,
   type DesktopUpdateChannel,
@@ -54,6 +54,7 @@ import { Button } from "../ui/button";
 import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
@@ -497,6 +498,13 @@ export function GeneralSettingsPanel() {
   const textGenInstanceId = textGenerationModelSelection.instanceId;
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
+  const [commitInstructionsDraft, setCommitInstructionsDraft] = useState(
+    settings.commitMessageInstructions,
+  );
+  const savedCommitInstructions = settings.commitMessageInstructions;
+  const trimmedCommitInstructionsDraft = commitInstructionsDraft.trim();
+  const isCommitInstructionsDirty = commitInstructionsDraft !== savedCommitInstructions;
+  const hasCommitInstructions = savedCommitInstructions.length > 0;
   const gitModelInstanceEntries = sortProviderInstanceEntries(
     deriveProviderInstanceEntries(serverProviders),
   );
@@ -515,6 +523,9 @@ export function GeneralSettingsPanel() {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  useEffect(() => {
+    setCommitInstructionsDraft(savedCommitInstructions);
+  }, [savedCommitInstructions]);
 
   return (
     <SettingsPageContainer>
@@ -891,6 +902,47 @@ export function GeneralSettingsPanel() {
             </div>
           }
         />
+
+        <SettingsRow
+          title="Commit message instructions"
+          description="Add guidance that will be included when T3 Code generates commit messages."
+          resetAction={
+            hasCommitInstructions ? (
+              <SettingResetButton
+                label="commit message instructions"
+                onClick={() => {
+                  setCommitInstructionsDraft(DEFAULT_UNIFIED_SETTINGS.commitMessageInstructions);
+                  updateSettings({
+                    commitMessageInstructions: DEFAULT_UNIFIED_SETTINGS.commitMessageInstructions,
+                  });
+                }}
+              />
+            ) : null
+          }
+          control={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!isCommitInstructionsDirty}
+              onClick={() =>
+                updateSettings({
+                  commitMessageInstructions: trimmedCommitInstructionsDraft,
+                })
+              }
+            >
+              Save
+            </Button>
+          }
+        >
+          <Textarea
+            value={commitInstructionsDraft}
+            onChange={(event) => setCommitInstructionsDraft(event.target.value)}
+            placeholder="Example: Always use lowercase conventional commit prefixes, keep subjects under 60 characters, and mention migrations when present."
+            className="mt-3 min-h-24 resize-y text-sm"
+            aria-label="Commit message instructions"
+          />
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection title="About">
