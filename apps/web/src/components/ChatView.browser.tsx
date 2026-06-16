@@ -22,7 +22,7 @@ import {
   DEFAULT_TERMINAL_ID,
   ServerConfig as ServerConfigSchema,
 } from "@t3tools/contracts";
-import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
+import { scopedThreadKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
 import { createModelCapabilities, createModelSelection } from "@t3tools/shared/model";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import * as Option from "effect/Option";
@@ -117,6 +117,7 @@ const PROJECT_ID = "project-1" as ProjectId;
 const SECOND_PROJECT_ID = "project-2" as ProjectId;
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
 const REMOTE_ENVIRONMENT_ID = EnvironmentId.make("environment-remote");
+const WSL_ENVIRONMENT_ID = EnvironmentId.make("environment-wsl");
 const THREAD_REF = scopeThreadRef(LOCAL_ENVIRONMENT_ID, THREAD_ID);
 const THREAD_KEY = scopedThreadKey(THREAD_REF);
 const UUID_ROUTE_RE = /^\/draft\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -3342,6 +3343,69 @@ describe("ChatView timeline estimator parity (full app)", () => {
             request.data === "bun install\r",
         ),
       ).toBe(false);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("sends draft thread turns through the draft environment api", async () => {
+    const draftId = DraftId.make("draft-wsl-send");
+    const wslThreadId = "thread-wsl-send" as ThreadId;
+    const wslProjectRef = scopeProjectRef(WSL_ENVIRONMENT_ID, PROJECT_ID);
+    const wslDispatchMock = vi.fn(async () => ({
+      sequence: fixture.snapshot.snapshotSequence + 1,
+    }));
+
+    useComposerDraftStore.getState().setProjectDraftThreadId(wslProjectRef, draftId, {
+      threadId: wslThreadId,
+    });
+    useComposerDraftStore.getState().setPrompt(draftId, "Explore this project");
+    __setEnvironmentApiOverrideForTests(
+      WSL_ENVIRONMENT_ID,
+      createMockEnvironmentApi({
+        browse: vi.fn(),
+        dispatchCommand: wslDispatchMock,
+      }),
+    );
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+      initialPath: `/draft/${draftId}`,
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          throw new Error("Primary environment should not receive WSL draft dispatches.");
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      useStore
+        .getState()
+        .syncServerShellSnapshot(toShellSnapshot(createDraftOnlySnapshot()), WSL_ENVIRONMENT_ID);
+      await waitForLayout();
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          expect(wslDispatchMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: "thread.turn.start",
+              threadId: wslThreadId,
+              bootstrap: expect.objectContaining({
+                createThread: expect.objectContaining({
+                  projectId: PROJECT_ID,
+                }),
+              }),
+            }),
+          );
+        },
+        { timeout: 8_000, interval: 16 },
+      );
     } finally {
       await mounted.cleanup();
     }

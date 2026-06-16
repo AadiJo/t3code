@@ -1083,7 +1083,7 @@ function ChatViewContent(props: ChatViewProps) {
       [routeKind, routeThreadRef],
     ),
   );
-  const setStoreThreadError = useStore((store) => store.setError);
+  const setStoreThreadError = useStore((store) => store.setThreadErrorByRef);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
   const activeThreadLastVisitedAt = useUiStateStore((store) =>
     routeKind === "server" ? store.threadLastVisitedAtById[routeThreadKey] : undefined,
@@ -2452,7 +2452,7 @@ function ChatViewContent(props: ChatViewProps) {
         targetThreadId,
       });
       if (isCurrentServerThread) {
-        setStoreThreadError(targetThreadId, nextError);
+        setStoreThreadError(routeThreadRef, nextError);
         return;
       }
       const localDraftErrorKey = draftId ?? targetThreadId;
@@ -2623,7 +2623,7 @@ function ChatViewContent(props: ChatViewProps) {
       if (!cwdForOpen) {
         return;
       }
-      const api = readEnvironmentApi(environmentId);
+      const api = readEnvironmentApi(activeThreadRef.environmentId);
       if (!api) {
         return;
       }
@@ -2657,7 +2657,6 @@ function ChatViewContent(props: ChatViewProps) {
       activeThreadId,
       activeThreadRef,
       activeThreadWorktreePath,
-      environmentId,
       gitCwd,
       hasReachedSplitLimit,
       storeSplitTerminal,
@@ -2672,7 +2671,7 @@ function ChatViewContent(props: ChatViewProps) {
     if (!cwdForOpen) {
       return;
     }
-    const api = readEnvironmentApi(environmentId);
+    const api = readEnvironmentApi(activeThreadRef.environmentId);
     if (!api) {
       return;
     }
@@ -2701,14 +2700,14 @@ function ChatViewContent(props: ChatViewProps) {
     activeThreadId,
     activeThreadRef,
     activeThreadWorktreePath,
-    environmentId,
     gitCwd,
     storeNewTerminal,
   ]);
   const closeTerminal = useCallback(
     (terminalId: string) => {
-      const api = readEnvironmentApi(environmentId);
-      if (!activeThreadId || !api || !activeThreadRef) return;
+      if (!activeThreadId || !activeThreadRef) return;
+      const api = readEnvironmentApi(activeThreadRef.environmentId);
+      if (!api) return;
       const isFinalTerminal = activeKnownTerminalIds.length <= 1;
       const fallbackExitWrite = () =>
         api.terminal
@@ -2733,7 +2732,7 @@ function ChatViewContent(props: ChatViewProps) {
       storeCloseTerminal(activeThreadRef, terminalId);
       setTerminalFocusRequestId((value) => value + 1);
     },
-    [activeThreadId, activeThreadRef, activeKnownTerminalIds, environmentId, storeCloseTerminal],
+    [activeThreadId, activeThreadRef, activeKnownTerminalIds, storeCloseTerminal],
   );
   const runProjectScript = useCallback(
     async (
@@ -2746,7 +2745,7 @@ function ChatViewContent(props: ChatViewProps) {
         rememberAsLastInvoked?: boolean;
       },
     ) => {
-      const api = readEnvironmentApi(environmentId);
+      const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
       if (!api || !activeThreadId || !activeProject || !activeThread) return;
       if (options?.rememberAsLastInvoked !== false) {
         setLastInvokedScriptByProjectId((current) => {
@@ -2849,7 +2848,6 @@ function ChatViewContent(props: ChatViewProps) {
       storeNewTerminal,
       storeSetActiveTerminal,
       setLastInvokedScriptByProjectId,
-      environmentId,
       activeKnownTerminalIds,
       runningTerminalIds,
       terminalUiState.activeTerminalId,
@@ -2858,6 +2856,7 @@ function ChatViewContent(props: ChatViewProps) {
 
   const persistProjectScripts = useCallback(
     async (input: {
+      environmentId: EnvironmentId;
       projectId: ProjectId;
       projectCwd: string;
       previousScripts: ProjectScript[];
@@ -2865,7 +2864,7 @@ function ChatViewContent(props: ChatViewProps) {
       keybinding?: string | null;
       keybindingCommand: KeybindingCommand;
     }) => {
-      const api = readEnvironmentApi(environmentId);
+      const api = readEnvironmentApi(input.environmentId);
       if (!api) return;
 
       await api.orchestration.dispatchCommand({
@@ -2888,7 +2887,7 @@ function ChatViewContent(props: ChatViewProps) {
         await localApi.server.upsertKeybinding(keybindingRule);
       }
     },
-    [environmentId],
+    [],
   );
   const saveProjectScript = useCallback(
     async (input: NewProjectScriptInput) => {
@@ -2916,6 +2915,7 @@ function ChatViewContent(props: ChatViewProps) {
         : [...activeProject.scripts, nextScript];
 
       await persistProjectScripts({
+        environmentId: activeProject.environmentId,
         projectId: activeProject.id,
         projectCwd: activeProject.cwd,
         previousScripts: activeProject.scripts,
@@ -2954,6 +2954,7 @@ function ChatViewContent(props: ChatViewProps) {
       );
 
       await persistProjectScripts({
+        environmentId: activeProject.environmentId,
         projectId: activeProject.id,
         projectCwd: activeProject.cwd,
         previousScripts: activeProject.scripts,
@@ -2973,6 +2974,7 @@ function ChatViewContent(props: ChatViewProps) {
 
       try {
         await persistProjectScripts({
+          environmentId: activeProject.environmentId,
           projectId: activeProject.id,
           projectCwd: activeProject.cwd,
           previousScripts: activeProject.scripts,
@@ -3144,6 +3146,7 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
+      environmentId: EnvironmentId;
       threadId: ThreadId;
       createdAt: string;
       modelSelection?: ModelSelection;
@@ -3153,7 +3156,7 @@ function ChatViewContent(props: ChatViewProps) {
       if (!serverThread) {
         return;
       }
-      const api = readEnvironmentApi(environmentId);
+      const api = readEnvironmentApi(input.environmentId);
       if (!api) {
         return;
       }
@@ -3193,7 +3196,7 @@ function ChatViewContent(props: ChatViewProps) {
         });
       }
     },
-    [environmentId, serverThread],
+    [serverThread],
   );
 
   // Scroll helpers — LegendList handles auto-scroll via maintainScrollAtEnd.
@@ -3566,7 +3569,7 @@ function ChatViewContent(props: ChatViewProps) {
 
   const onRevertToTurnCount = useCallback(
     async (turnCount: number) => {
-      const api = readEnvironmentApi(environmentId);
+      const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
       const localApi = readLocalApi();
       if (!api || !localApi || !activeThread || isRevertingCheckpoint) return;
 
@@ -3614,7 +3617,6 @@ function ChatViewContent(props: ChatViewProps) {
       activeThread,
       activeEnvironmentUnavailable,
       activeEnvironmentUnavailableLabel,
-      environmentId,
       isConnecting,
       isRevertingCheckpoint,
       isSendBusy,
@@ -3625,10 +3627,13 @@ function ChatViewContent(props: ChatViewProps) {
 
   const onSend = async (e?: { preventDefault: () => void }) => {
     e?.preventDefault();
-    const api = readEnvironmentApi(environmentId);
+    if (!activeThread) {
+      return;
+    }
+    const sendEnvironmentId = activeThread.environmentId;
+    const api = readEnvironmentApi(sendEnvironmentId);
     if (
       !api ||
-      !activeThread ||
       isSendBusy ||
       isConnecting ||
       activeEnvironmentUnavailable ||
@@ -3844,6 +3849,7 @@ function ChatViewContent(props: ChatViewProps) {
 
       if (isServerThread) {
         await persistThreadSettingsForNextTurn({
+          environmentId: sendEnvironmentId,
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
           ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
@@ -3947,7 +3953,7 @@ function ChatViewContent(props: ChatViewProps) {
   };
 
   const onInterrupt = async () => {
-    const api = readEnvironmentApi(environmentId);
+    const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
     if (!api || !activeThread) return;
     await api.orchestration.dispatchCommand({
       type: "thread.turn.interrupt",
@@ -3959,7 +3965,7 @@ function ChatViewContent(props: ChatViewProps) {
 
   const onRespondToApproval = useCallback(
     async (requestId: ApprovalRequestId, decision: ProviderApprovalDecision) => {
-      const api = readEnvironmentApi(environmentId);
+      const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
       if (!api || !activeThreadId) return;
 
       setRespondingRequestIds((existing) =>
@@ -3982,12 +3988,12 @@ function ChatViewContent(props: ChatViewProps) {
         });
       setRespondingRequestIds((existing) => existing.filter((id) => id !== requestId));
     },
-    [activeThreadId, environmentId, setThreadError],
+    [activeThread, activeThreadId, setThreadError],
   );
 
   const onRespondToUserInput = useCallback(
     async (requestId: ApprovalRequestId, answers: Record<string, unknown>) => {
-      const api = readEnvironmentApi(environmentId);
+      const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
       if (!api || !activeThreadId) return;
 
       setRespondingUserInputRequestIds((existing) =>
@@ -4010,7 +4016,7 @@ function ChatViewContent(props: ChatViewProps) {
         });
       setRespondingUserInputRequestIds((existing) => existing.filter((id) => id !== requestId));
     },
-    [activeThreadId, environmentId, setThreadError],
+    [activeThread, activeThreadId, setThreadError],
   );
 
   const setActivePendingUserInputQuestionIndex = useCallback(
@@ -4127,7 +4133,7 @@ function ChatViewContent(props: ChatViewProps) {
       text: string;
       interactionMode: "default" | "plan";
     }) => {
-      const api = readEnvironmentApi(environmentId);
+      const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
       if (
         !api ||
         !activeThread ||
@@ -4190,6 +4196,7 @@ function ChatViewContent(props: ChatViewProps) {
 
       try {
         await persistThreadSettingsForNextTurn({
+          environmentId: activeThread.environmentId,
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
           modelSelection: ctxSelectedModelSelection,
@@ -4263,13 +4270,12 @@ function ChatViewContent(props: ChatViewProps) {
       setComposerDraftInteractionMode,
       setThreadError,
       autoOpenPlanSidebar,
-      environmentId,
       composerRef,
     ],
   );
 
   const onImplementPlanInNewThread = useCallback(async () => {
-    const api = readEnvironmentApi(environmentId);
+    const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
     if (
       !api ||
       !activeThread ||
@@ -4401,7 +4407,6 @@ function ChatViewContent(props: ChatViewProps) {
     resetLocalDispatch,
     runtimeMode,
     autoOpenPlanSidebar,
-    environmentId,
     composerRef,
   ]);
 
