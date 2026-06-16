@@ -7,6 +7,7 @@ import {
   type ServerProviderUpdatedPayload,
   type ServerProviderUpdateState,
 } from "@t3tools/contracts";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -73,10 +74,20 @@ const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceR
     readonly command: string;
     readonly args: ReadonlyArray<string>;
   }) {
+    const platform = yield* HostProcessPlatform;
     const collectCommandResult = Effect.fn("ProviderMaintenanceRunner.collectCommandResult")(
       function* () {
         const child = yield* input.spawner
-          .spawn(ChildProcess.make(input.command, [...input.args]))
+          .spawn(
+            ChildProcess.make(input.command, [...input.args], {
+              // The update executable is usually a launcher shim (e.g. `npm` ->
+              // `npm.cmd`, `pnpm` -> `pnpm.cmd`). On Windows a bare-name spawn
+              // does not resolve PATHEXT, so it fails with ENOENT; run through
+              // the shell so the shim resolves, matching how every other
+              // provider command is spawned on Windows.
+              shell: platform === "win32",
+            }),
+          )
           .pipe(
             Effect.mapError(
               (cause) =>

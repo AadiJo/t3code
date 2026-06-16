@@ -1,0 +1,32 @@
+export interface WslUncPath {
+  readonly distro: string;
+  readonly linuxPath: string;
+}
+
+const WSL_UNC_PREFIXES = ["\\\\wsl.localhost\\", "\\\\wsl$\\"] as const;
+const WSL_DISTRO_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+export function parseWslUncPath(input: string): WslUncPath | null {
+  const normalized = input.trim().replaceAll("/", "\\");
+  const prefix = WSL_UNC_PREFIXES.find((candidate) =>
+    normalized.toLowerCase().startsWith(candidate.toLowerCase()),
+  );
+  if (!prefix) {
+    return null;
+  }
+
+  const segments = restSegments(normalized.slice(prefix.length));
+  const distro = segments[0];
+  if (!distro || !WSL_DISTRO_NAME_PATTERN.test(distro)) {
+    return null;
+  }
+
+  return {
+    distro,
+    linuxPath: segments.length === 1 ? "/" : `/${segments.slice(1).join("/")}`,
+  };
+}
+
+function restSegments(rest: string): ReadonlyArray<string> {
+  return rest.split("\\").flatMap((segment) => (segment.length > 0 ? [segment] : []));
+}

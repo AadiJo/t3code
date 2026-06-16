@@ -157,10 +157,20 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         cpu: ["x64"],
       },
     });
+    // Windows artifacts also bundle the WSL (Linux x64, glibc) backend, so the
+    // staged install must fetch its native optional deps (e.g. ffi-rs) too.
+    assert.deepStrictEqual(createStageWorkspaceConfig("win", "x64"), {
+      supportedArchitectures: {
+        os: ["win32", "linux"],
+        cpu: ["x64"],
+        libc: ["glibc"],
+      },
+    });
     assert.deepStrictEqual(createStageWorkspaceConfig("win", "arm64"), {
       supportedArchitectures: {
-        os: ["win32"],
-        cpu: ["arm64"],
+        os: ["win32", "linux"],
+        cpu: ["arm64", "x64"],
+        libc: ["glibc"],
       },
     });
     assert.deepStrictEqual(createStageWorkspaceConfig("mac", "universal"), {
@@ -230,6 +240,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         verbose: Option.none(),
         mockUpdates: Option.none(),
         mockUpdateServerPort: Option.none(),
+        wslPrebuild: Option.none(),
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -267,6 +278,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         verbose: Option.some(false),
         mockUpdates: Option.some(false),
         mockUpdateServerPort: Option.none(),
+        wslPrebuild: Option.none(),
       }).pipe(
         Effect.provide(
           ConfigProvider.layer(

@@ -374,12 +374,15 @@ const createDesktopBridgeStub = (overrides?: {
 
   return {
     getAppBranding: vi.fn().mockReturnValue(null),
-    getLocalEnvironmentBootstrap: () => ({
-      label: "Local environment",
-      httpBaseUrl: "http://127.0.0.1:3773",
-      wsBaseUrl: "ws://127.0.0.1:3773",
-      bootstrapToken: "desktop-bootstrap-token",
-    }),
+    getLocalEnvironmentBootstraps: () => [
+      {
+        id: "primary",
+        label: "Windows",
+        httpBaseUrl: "http://127.0.0.1:3773",
+        wsBaseUrl: "ws://127.0.0.1:3773",
+        bootstrapToken: "desktop-bootstrap-token",
+      },
+    ],
     getClientSettings: vi.fn().mockResolvedValue(null),
     setClientSettings: vi.fn().mockResolvedValue(undefined),
     getSavedEnvironmentRegistry: vi.fn().mockResolvedValue([]),
@@ -458,6 +461,34 @@ const createDesktopBridgeStub = (overrides?: {
       tailscaleServePort: input.port ?? 443,
     })),
     getAdvertisedEndpoints: vi.fn().mockResolvedValue(overrides?.advertisedEndpoints ?? []),
+    getWslState: vi.fn().mockResolvedValue({
+      enabled: false,
+      distro: null,
+      available: false,
+      wslOnly: false,
+      distros: [],
+    }),
+    setWslBackendEnabled: vi.fn().mockResolvedValue({
+      enabled: false,
+      distro: null,
+      available: false,
+      wslOnly: false,
+      distros: [],
+    }),
+    setWslDistro: vi.fn().mockResolvedValue({
+      enabled: false,
+      distro: null,
+      available: false,
+      wslOnly: false,
+      distros: [],
+    }),
+    setWslOnly: vi.fn().mockResolvedValue({
+      enabled: false,
+      distro: null,
+      available: false,
+      wslOnly: false,
+      distros: [],
+    }),
     pickFolder: vi.fn().mockResolvedValue(null),
     confirm: vi.fn().mockResolvedValue(false),
     setTheme: vi.fn().mockResolvedValue(undefined),

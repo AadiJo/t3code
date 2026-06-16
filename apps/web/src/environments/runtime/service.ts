@@ -46,6 +46,7 @@ import {
 import { ensureLocalApi } from "~/localApi";
 import { collectActiveTerminalUiThreadKeys } from "~/lib/terminalUiStateCleanup";
 import { deriveOrchestrationBatchEffects } from "~/orchestrationEventEffects";
+import { reconcileLocalSecondaryEnvironments } from "../local";
 import { getPrimaryKnownEnvironment } from "../primary";
 import { webRuntime } from "../../lib/runtime";
 import { connectManagedCloudEnvironment } from "../../cloud/linkEnvironment";
@@ -1476,7 +1477,7 @@ function maybeCreatePrimaryEnvironmentConnection(): EnvironmentConnection | null
   return getPrimaryKnownEnvironment()?.environmentId ? createPrimaryEnvironmentConnection() : null;
 }
 
-async function ensureSavedEnvironmentConnection(
+export async function ensureSavedEnvironmentConnection(
   record: SavedEnvironmentRecord,
   options?: {
     readonly client?: WsRpcClient;
@@ -1866,6 +1867,21 @@ export async function removeSavedEnvironment(environmentId: EnvironmentId): Prom
   await removeSavedEnvironmentBearerToken(environmentId);
 }
 
+// Variant for desktop-managed secondary local envs. Same teardown
+// shape as removeSavedEnvironment but skips the bearer-token-secret
+// delete: the local-secondary reconciler manages its own bearer
+// tokens and the secret store may not have a key for a transient,
+// non-persisted record.
+export async function removeSavedEnvironmentByInstance(
+  environmentId: EnvironmentId,
+): Promise<void> {
+  await disconnectSavedEnvironment(environmentId);
+  disposeThreadDetailSubscriptionsForEnvironment(environmentId);
+  useSavedEnvironmentRegistryStore.getState().remove(environmentId);
+  useSavedEnvironmentRuntimeStore.getState().clear(environmentId);
+  useStore.getState().removeEnvironmentState(environmentId);
+}
+
 export async function addSavedEnvironment(input: {
   readonly label: string;
   readonly pairingUrl?: string;
@@ -2041,6 +2057,13 @@ export function startEnvironmentConnectionService(queryClient: QueryClient): () 
   const requestSavedEnvironmentSync = createSavedEnvironmentSyncScheduler();
 
   maybeCreatePrimaryEnvironmentConnection();
+
+  // Bring up the desktop-managed secondary local environments (today
+  // just the WSL backend, if enabled). The reconcile call owns its
+  // own retry loop: WSL cold boot routinely takes 30-60 seconds.
+  // reconcileLocalSecondaryEnvironments() backs off internally until
+  // every secondary lands or the retry budget closes.
+  void reconcileLocalSecondaryEnvironments();
 
   const unsubscribeSavedEnvironments = useSavedEnvironmentRegistryStore.subscribe(() => {
     if (!hasSavedEnvironmentRegistryHydrated()) {
