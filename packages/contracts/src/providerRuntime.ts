@@ -17,6 +17,7 @@ import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const UnknownRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
+const RuntimeMessagePhase = Schema.Literals(["commentary", "final_answer"]);
 
 const RuntimeEventRawSource = Schema.Union([
   Schema.Literal("codex.app-server.notification"),
@@ -436,6 +437,7 @@ export const ItemLifecyclePayload = Schema.Struct({
   status: Schema.optional(RuntimeItemStatus),
   title: Schema.optional(TrimmedNonEmptyStringSchema),
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
+  messagePhase: Schema.optional(RuntimeMessagePhase),
   data: Schema.optional(Schema.Unknown),
 });
 export type ItemLifecyclePayload = typeof ItemLifecyclePayload.Type;

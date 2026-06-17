@@ -704,6 +704,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           role: "assistant",
           text: command.delta,
           turnId: command.turnId ?? null,
+          ...(command.phase !== undefined ? { phase: command.phase } : {}),
           streaming: true,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,

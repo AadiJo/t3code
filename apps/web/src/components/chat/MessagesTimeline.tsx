@@ -107,6 +107,7 @@ import {
   parseReviewCommentMessageSegments,
   type ReviewCommentContext,
 } from "../../reviewCommentContext";
+import { getVerticalScrollEndState } from "./scrollPosition";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -290,12 +291,26 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   const rows = useStableRows(rawRows);
 
-  const handleScroll = useCallback(() => {
-    const state = listRef.current?.getState?.();
-    if (state) {
-      onIsAtEndChange(state.isAtEnd);
-    }
-  }, [listRef, onIsAtEndChange]);
+  const handleScroll = useCallback(
+    (event: unknown) => {
+      const scrollport =
+        typeof event === "object" && event !== null && "currentTarget" in event
+          ? event.currentTarget
+          : null;
+      if (scrollport instanceof HTMLElement) {
+        if (getVerticalScrollEndState(scrollport).isAtEnd) {
+          onIsAtEndChange(true);
+          return;
+        }
+      }
+
+      const state = listRef.current?.getState?.();
+      if (state) {
+        onIsAtEndChange(state.isAtEnd);
+      }
+    },
+    [listRef, onIsAtEndChange],
+  );
 
   const previousRowCountRef = useRef(rows.length);
   useEffect(() => {
@@ -898,7 +913,7 @@ function AssistantChangedFilesSectionInner({
 
   return (
     <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-      <div className="sticky top-2 z-10 mb-1.5 flex items-center justify-between gap-2 bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:content-['']">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
           <span>Changed files ({changedFileCountLabel})</span>
           {hasNonZeroStat(summaryStat) && (

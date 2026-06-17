@@ -173,6 +173,7 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { ExpandedImageDialog } from "./chat/ExpandedImageDialog";
 import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
+import { getVerticalScrollEndState } from "./chat/scrollPosition";
 import { ChatHeader } from "./chat/ChatHeader";
 import { PanelLayoutControls, RightPanelMaximizeControl } from "./chat/PanelLayoutControls";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
@@ -3328,21 +3329,25 @@ function ChatViewContent(props: ChatViewProps) {
     legendListRef.current?.scrollToEnd?.({ animated });
   }, []);
 
+  const timelineIsAtEnd = useCallback(() => {
+    const scrollport = document.querySelector(".timeline-scrollport");
+    if (!(scrollport instanceof HTMLElement)) {
+      return false;
+    }
+
+    return getVerticalScrollEndState(scrollport).isAtEnd;
+  }, []);
+
   // Debounce *showing* the scroll-to-bottom pill so it doesn't flash during
   // thread switches.  LegendList fires scroll events with isAtEnd=false while
   // initialScrollAtEnd is settling; hiding is always immediate.
   const showScrollDebouncer = useRef(
     new Debouncer(
       () => {
-        const scrollport = document.querySelector(".timeline-scrollport");
-        if (scrollport instanceof HTMLElement) {
-          const maxScrollTop = scrollport.scrollHeight - scrollport.clientHeight;
-          const distanceFromBottom = maxScrollTop - scrollport.scrollTop;
-          if (maxScrollTop <= 8 || distanceFromBottom <= 8) {
-            isAtEndRef.current = true;
-            setShowScrollToBottom(false);
-            return;
-          }
+        if (timelineIsAtEnd()) {
+          isAtEndRef.current = true;
+          setShowScrollToBottom(false);
+          return;
         }
         setShowScrollToBottom(true);
       },
@@ -3374,6 +3379,64 @@ function ChatViewContent(props: ChatViewProps) {
       window.clearTimeout(timeoutId);
     };
   }, [showScrollToBottom]);
+
+  useEffect(() => {
+    const scrollport = document.querySelector(".timeline-scrollport");
+    if (!(scrollport instanceof HTMLElement)) {
+      return;
+    }
+
+    const hideIfAtEnd = () => {
+      if (!timelineIsAtEnd()) {
+        return;
+      }
+
+      showScrollDebouncer.current.cancel();
+      isAtEndRef.current = true;
+      setShowScrollToBottom(false);
+    };
+
+    let frameId: number | null = null;
+    const scheduleRevalidation = () => {
+      if (frameId !== null) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        hideIfAtEnd();
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleRevalidation);
+    resizeObserver?.observe(scrollport);
+    const contentElement = scrollport.firstElementChild;
+    if (contentElement instanceof HTMLElement) {
+      resizeObserver?.observe(contentElement);
+    }
+
+    const mutationObserver =
+      typeof MutationObserver === "undefined" ? null : new MutationObserver(scheduleRevalidation);
+    mutationObserver?.observe(scrollport, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+
+    window.addEventListener("resize", scheduleRevalidation);
+    scheduleRevalidation();
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      window.removeEventListener("resize", scheduleRevalidation);
+    };
+  }, [isWorking, routeThreadKey, timelineEntries.length, timelineIsAtEnd]);
 
   useEffect(() => {
     setPullRequestDialogState(null);

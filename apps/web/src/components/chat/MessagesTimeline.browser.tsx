@@ -19,6 +19,8 @@ vi.mock("@legendapp/list/react", async () => {
     renderItem: (args: { item: { id: string } }) => React.ReactNode;
     ListHeaderComponent?: React.ReactNode;
     ListFooterComponent?: React.ReactNode;
+    className?: string;
+    onScroll?: React.UIEventHandler<HTMLDivElement>;
     ref?: React.Ref<LegendListRef>;
   }) {
     React.useImperativeHandle(
@@ -31,7 +33,7 @@ vi.mock("@legendapp/list/react", async () => {
     );
 
     return (
-      <div data-testid="legend-list">
+      <div data-testid="legend-list" className={props.className} onScroll={props.onScroll}>
         {props.ListHeaderComponent}
         {props.data.map((item) => (
           <div key={props.keyExtractor(item)}>{props.renderItem({ item })}</div>
@@ -231,6 +233,40 @@ describe("MessagesTimeline", () => {
       expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
       expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
       expect(requestAnimationFrameSpy).toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("reports manual bottom scrolling from the scrollport even if Legend state is stale", async () => {
+    getStateSpy.mockReturnValue({ isAtEnd: false });
+    const props = buildProps();
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        timelineEntries={[
+          buildUserTimelineEntry("First message"),
+          buildAssistantTimelineEntry("Reply"),
+        ]}
+      />,
+    );
+
+    try {
+      const scrollport = await vi.waitFor(() => {
+        const element = document.querySelector<HTMLElement>(".timeline-scrollport");
+        expect(element).not.toBeNull();
+        return element!;
+      });
+      Object.defineProperties(scrollport, {
+        clientHeight: { configurable: true, value: 300 },
+        scrollHeight: { configurable: true, value: 900 },
+        scrollTop: { configurable: true, value: 600 },
+      });
+
+      scrollport.dispatchEvent(new Event("scroll", { bubbles: true }));
+
+      expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
+      expect(getStateSpy).not.toHaveBeenCalled();
     } finally {
       await screen.unmount();
     }

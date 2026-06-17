@@ -151,6 +151,21 @@ function deriveTerminalAssistantMessageIds(timelineEntries: ReadonlyArray<Timeli
   return new Set(lastAssistantMessageIdByResponseKey.values());
 }
 
+function deriveFinalAnswerStartedTurnIds(timelineEntries: ReadonlyArray<TimelineEntry>) {
+  const turnIds = new Set<TurnId>();
+  for (const timelineEntry of timelineEntries) {
+    if (
+      timelineEntry.kind === "message" &&
+      timelineEntry.message.role === "assistant" &&
+      timelineEntry.message.turnId &&
+      timelineEntry.message.phase === "final_answer"
+    ) {
+      turnIds.add(timelineEntry.message.turnId);
+    }
+  }
+  return turnIds;
+}
+
 interface TurnFold {
   turnId: TurnId;
   anchorEntryId: string;
@@ -191,6 +206,7 @@ function deriveWorkingPhase(
 function deriveTurnFolds(input: {
   timelineEntries: ReadonlyArray<TimelineEntry>;
   terminalAssistantMessageIds: ReadonlySet<string>;
+  finalAnswerStartedTurnIds: ReadonlySet<TurnId>;
   latestTurn: TimelineLatestTurn | null;
   unsettledTurnId: TurnId | null;
 }): ReadonlyMap<string, TurnFold> {
@@ -250,10 +266,11 @@ function deriveTurnFolds(input: {
 
   const foldsByAnchorEntryId = new Map<string, TurnFold>();
   for (const [turnId, group] of groupsByTurnId) {
-    if (turnId === input.unsettledTurnId) {
+    const finalAnswerStarted = input.finalAnswerStartedTurnIds.has(turnId);
+    if (turnId === input.unsettledTurnId && !finalAnswerStarted) {
       continue;
     }
-    if (group.hasStreamingMessage) {
+    if (group.hasStreamingMessage && !finalAnswerStarted) {
       continue;
     }
     const hiddenEntryIds = new Set<string>();
@@ -325,10 +342,12 @@ export function deriveMessagesTimelineRows(input: {
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
   const terminalAssistantMessageIds = deriveTerminalAssistantMessageIds(input.timelineEntries);
+  const finalAnswerStartedTurnIds = deriveFinalAnswerStartedTurnIds(input.timelineEntries);
   const unsettledTurnId = deriveUnsettledTurnId(input.latestTurn ?? null);
   const foldsByAnchorEntryId = deriveTurnFolds({
     timelineEntries: input.timelineEntries,
     terminalAssistantMessageIds,
+    finalAnswerStartedTurnIds,
     latestTurn: input.latestTurn ?? null,
     unsettledTurnId,
   });

@@ -765,6 +765,75 @@ describe("deriveMessagesTimelineRows", () => {
     });
   });
 
+  it("folds active-turn commentary once the final answer starts streaming", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "assistant-commentary-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:05Z",
+          message: {
+            id: "assistant-commentary" as never,
+            role: "assistant",
+            text: "Checking the repo.",
+            turnId: "turn-1" as never,
+            phase: "commentary",
+            createdAt: "2026-01-01T00:00:05Z",
+            completedAt: "2026-01-01T00:00:06Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry-1",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:08Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:08Z",
+            turnId: "turn-1" as never,
+            label: "Ran command",
+            tone: "tool" as const,
+          },
+        },
+        {
+          id: "assistant-final-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:20Z",
+          message: {
+            id: "assistant-final" as never,
+            role: "assistant",
+            text: "The answer is streaming",
+            turnId: "turn-1" as never,
+            phase: "final_answer",
+            createdAt: "2026-01-01T00:00:20Z",
+            streaming: true,
+          },
+        },
+      ],
+      latestTurn: {
+        turnId: "turn-1" as never,
+        state: "running",
+        startedAt: "2026-01-01T00:00:00Z",
+        completedAt: null,
+      },
+      isWorking: true,
+      activeTurnStartedAt: "2026-01-01T00:00:00Z",
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.id)).toEqual([
+      "turn-fold:turn-1",
+      "assistant-final-entry",
+      "working-indicator-row",
+    ]);
+    const foldRow = rows.find(
+      (row): row is Extract<(typeof rows)[number], { kind: "turn-fold" }> =>
+        row.kind === "turn-fold",
+    );
+    expect(foldRow?.expanded).toBe(false);
+  });
+
   it("only shows assistant metadata on the terminal assistant message", () => {
     const rows = deriveMessagesTimelineRows({
       timelineEntries: [

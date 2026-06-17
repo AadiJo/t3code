@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 
-import { mapCodexModelCapabilities } from "./CodexProvider.ts";
+import { mapCodexModelCapabilities, resolveCodexSkillExtraRoots } from "./CodexProvider.ts";
 
 it("maps current Codex model capability fields", () => {
   const capabilities = mapCodexModelCapabilities({
@@ -101,4 +101,10 @@ it("uses standard routing when the catalog has no default service tier", () => {
       currentValue: "default",
     },
   ]);
+});
+
+it("uses the configured Codex home skills directory as an extra skill root", () => {
+  const roots = resolveCodexSkillExtraRoots("/Users/test/.codex-work");
+  assert.strictEqual(roots.length, 1);
+  assert.match(roots[0]!, /[\\/]Users[\\/]test[\\/]\.codex-work[\\/]skills$/);
 });

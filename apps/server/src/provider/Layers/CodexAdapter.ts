@@ -291,6 +291,13 @@ function itemDetail(item: CodexLifecycleItem): string | undefined {
   return undefined;
 }
 
+function itemMessagePhase(item: CodexLifecycleItem): "commentary" | "final_answer" | undefined {
+  if (!("phase" in item)) {
+    return undefined;
+  }
+  return item.phase === "commentary" || item.phase === "final_answer" ? item.phase : undefined;
+}
+
 function toRequestTypeFromMethod(method: string): CanonicalRequestType {
   switch (method) {
     case "item/commandExecution/requestApproval":
@@ -488,6 +495,9 @@ function mapItemLifecycle(
       ...(status ? { status } : {}),
       ...(itemTitle(itemType, item) ? { title: itemTitle(itemType, item) } : {}),
       ...(detail ? { detail } : {}),
+      ...(itemType === "assistant_message" && itemMessagePhase(item)
+        ? { messagePhase: itemMessagePhase(item) }
+        : {}),
       ...(event.payload !== undefined ? { data: event.payload } : {}),
     },
   };

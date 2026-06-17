@@ -206,6 +206,7 @@ export function applyThreadDetailEvent(
           ? { attachments: event.payload.attachments }
           : {}),
         turnId: event.payload.turnId,
+        ...(event.payload.phase !== undefined ? { phase: event.payload.phase } : {}),
         streaming: event.payload.streaming,
         createdAt: event.payload.createdAt,
         updatedAt: event.payload.updatedAt,
@@ -225,6 +226,7 @@ export function applyThreadDetailEvent(
                       : entry.text,
                   streaming: message.streaming,
                   ...(message.turnId !== undefined ? { turnId: message.turnId } : {}),
+                  ...(message.phase !== undefined ? { phase: message.phase } : {}),
                   ...(message.streaming ? {} : { updatedAt: message.updatedAt }),
                   ...(message.attachments !== undefined
                     ? { attachments: message.attachments }

@@ -5,9 +5,11 @@ import {
   MessageId,
   type OrchestrationEvent,
   type OrchestrationMessage,
+  type OrchestrationMessagePhase,
   type OrchestrationProposedPlanId,
   CheckpointRef,
   isToolLifecycleItemType,
+  RuntimeItemId,
   ThreadId,
   type OrchestrationThreadGoal,
   type ThreadTokenUsageSnapshot,
@@ -57,6 +59,10 @@ const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_CACHE_CAPACITY = 20_000;
 const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_TTL = Duration.minutes(120);
 const BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY = 10_000;
 const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
+const ASSISTANT_MESSAGE_PHASE_BY_MESSAGE_ID_CACHE_CAPACITY = 20_000;
+const ASSISTANT_MESSAGE_PHASE_BY_MESSAGE_ID_TTL = Duration.minutes(120);
+const ASSISTANT_MESSAGE_PHASE_BY_ITEM_KEY_CACHE_CAPACITY = 20_000;
+const ASSISTANT_MESSAGE_PHASE_BY_ITEM_KEY_TTL = Duration.minutes(120);
 const GOAL_ACTIVITY_STATE_BY_THREAD_CACHE_CAPACITY = 10_000;
 const GOAL_ACTIVITY_STATE_BY_THREAD_TTL = Duration.minutes(120);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
@@ -249,6 +255,10 @@ function assistantSegmentMessageId(baseKey: string, segmentIndex: number): Messa
   return MessageId.make(
     segmentIndex === 0 ? `assistant:${baseKey}` : `assistant:${baseKey}:segment:${segmentIndex}`,
   );
+}
+
+function runtimeItemKey(threadId: ThreadId, itemId: RuntimeItemId): string {
+  return `${threadId}:${itemId}`;
 }
 function buildContextWindowActivityPayload(
   event: ProviderRuntimeEvent,
@@ -759,6 +769,18 @@ const make = Effect.gen(function* () {
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
   });
 
+  const assistantMessagePhaseByMessageId = yield* Cache.make<MessageId, OrchestrationMessagePhase>({
+    capacity: ASSISTANT_MESSAGE_PHASE_BY_MESSAGE_ID_CACHE_CAPACITY,
+    timeToLive: ASSISTANT_MESSAGE_PHASE_BY_MESSAGE_ID_TTL,
+    lookup: () => Effect.die(new Error("assistant message phase should be read through getOption")),
+  });
+
+  const assistantMessagePhaseByItemKey = yield* Cache.make<string, OrchestrationMessagePhase>({
+    capacity: ASSISTANT_MESSAGE_PHASE_BY_ITEM_KEY_CACHE_CAPACITY,
+    timeToLive: ASSISTANT_MESSAGE_PHASE_BY_ITEM_KEY_TTL,
+    lookup: () => Effect.die(new Error("assistant item phase should be read through getOption")),
+  });
+
   const goalActivityStateByThreadId = yield* Cache.make<ThreadId, GoalActivityState>({
     capacity: GOAL_ACTIVITY_STATE_BY_THREAD_CACHE_CAPACITY,
     timeToLive: GOAL_ACTIVITY_STATE_BY_THREAD_TTL,
@@ -954,8 +976,29 @@ const make = Effect.gen(function* () {
   const clearBufferedProposedPlan = (planId: string) =>
     Cache.invalidate(bufferedProposedPlanById, planId);
 
+  const rememberAssistantMessagePhase = (messageId: MessageId, phase: OrchestrationMessagePhase) =>
+    Cache.set(assistantMessagePhaseByMessageId, messageId, phase);
+
+  const getAssistantMessagePhase = (messageId: MessageId) =>
+    Cache.getOption(assistantMessagePhaseByMessageId, messageId).pipe(
+      Effect.map(Option.getOrUndefined),
+    );
+
+  const clearAssistantMessagePhase = (messageId: MessageId) =>
+    Cache.invalidate(assistantMessagePhaseByMessageId, messageId);
+
+  const getAssistantMessagePhaseForRuntimeEvent = (event: ProviderRuntimeEvent) =>
+    event.itemId
+      ? Cache.getOption(
+          assistantMessagePhaseByItemKey,
+          runtimeItemKey(event.threadId, event.itemId),
+        ).pipe(Effect.map(Option.getOrUndefined))
+      : Effect.void.pipe(Effect.map(() => undefined as OrchestrationMessagePhase | undefined));
+
   const clearAssistantMessageState = (messageId: MessageId) =>
-    clearBufferedAssistantText(messageId);
+    clearBufferedAssistantText(messageId).pipe(
+      Effect.andThen(clearAssistantMessagePhase(messageId)),
+    );
 
   const flushBufferedAssistantMessage = (input: {
     event: ProviderRuntimeEvent;
@@ -970,6 +1013,7 @@ const make = Effect.gen(function* () {
       if (!hasRenderableAssistantText(bufferedText)) {
         return false;
       }
+      const phase = yield* getAssistantMessagePhase(input.messageId);
 
       yield* orchestrationEngine.dispatch({
         type: "thread.message.assistant.delta",
@@ -978,6 +1022,7 @@ const make = Effect.gen(function* () {
         messageId: input.messageId,
         delta: bufferedText,
         ...(input.turnId ? { turnId: input.turnId } : {}),
+        ...(phase !== undefined ? { phase } : {}),
         createdAt: input.createdAt,
       });
       return true;
@@ -1036,6 +1081,7 @@ const make = Effect.gen(function* () {
             ? input.fallbackText!
             : "";
       const hasRenderableText = hasRenderableAssistantText(text);
+      const phase = yield* getAssistantMessagePhase(input.messageId);
 
       if (hasRenderableText) {
         yield* orchestrationEngine.dispatch({
@@ -1045,6 +1091,7 @@ const make = Effect.gen(function* () {
           messageId: input.messageId,
           delta: text,
           ...(input.turnId ? { turnId: input.turnId } : {}),
+          ...(phase !== undefined ? { phase } : {}),
           createdAt: input.createdAt,
         });
       }
@@ -1457,6 +1504,19 @@ const make = Effect.gen(function* () {
         }
       }
 
+      if (
+        event.type === "item.started" &&
+        event.payload.itemType === "assistant_message" &&
+        event.payload.messagePhase !== undefined &&
+        event.itemId !== undefined
+      ) {
+        yield* Cache.set(
+          assistantMessagePhaseByItemKey,
+          runtimeItemKey(event.threadId, event.itemId),
+          event.payload.messagePhase,
+        );
+      }
+
       const assistantDelta =
         event.type === "content.delta" && event.payload.streamKind === "assistant_text"
           ? event.payload.delta
@@ -1471,6 +1531,10 @@ const make = Effect.gen(function* () {
           event,
           ...(turnId ? { turnId } : {}),
         });
+        const assistantMessagePhase = yield* getAssistantMessagePhaseForRuntimeEvent(event);
+        if (assistantMessagePhase !== undefined) {
+          yield* rememberAssistantMessagePhase(assistantMessageId, assistantMessagePhase);
+        }
         if (turnId) {
           yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
         }
@@ -1489,6 +1553,7 @@ const make = Effect.gen(function* () {
               messageId: assistantMessageId,
               delta: spillChunk,
               ...(turnId ? { turnId } : {}),
+              ...(assistantMessagePhase !== undefined ? { phase: assistantMessagePhase } : {}),
               createdAt: now,
             });
           }
@@ -1500,6 +1565,7 @@ const make = Effect.gen(function* () {
             messageId: assistantMessageId,
             delta: assistantDelta,
             ...(turnId ? { turnId } : {}),
+            ...(assistantMessagePhase !== undefined ? { phase: assistantMessagePhase } : {}),
             createdAt: now,
           });
         }

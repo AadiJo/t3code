@@ -252,6 +252,12 @@ function parseCodexSkillsListResponse(
   });
 }
 
+export function resolveCodexSkillExtraRoots(resolvedHomePath: string | undefined): string[] {
+  const codexHome = resolvedHomePath ?? expandHomePath("~/.codex");
+  const separator = codexHome.includes("\\") ? "\\" : "/";
+  return [`${codexHome.replace(/[\\/]+$/, "")}${separator}skills`];
+}
+
 const requestAllCodexModels = Effect.fn("requestAllCodexModels")(function* (
   client: CodexClient.CodexAppServerClientShape,
 ) {
@@ -354,10 +360,25 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
+  const skillExtraRoots = resolveCodexSkillExtraRoots(resolvedHomePath);
+  yield* client
+    .request("skills/extraRoots/set", {
+      extraRoots: skillExtraRoots,
+    })
+    .pipe(
+      Effect.catch((error) =>
+        Effect.logDebug("Codex app-server rejected skill extra roots; continuing with defaults", {
+          error: error.message,
+          roots: skillExtraRoots,
+        }),
+      ),
+    );
+
   const [skillsResponse, models] = yield* Effect.all(
     [
       client.request("skills/list", {
         cwds: [input.cwd],
+        forceReload: true,
       }),
       requestAllCodexModels(client),
     ],

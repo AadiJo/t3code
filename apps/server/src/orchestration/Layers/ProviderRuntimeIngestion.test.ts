@@ -1578,8 +1578,10 @@ describe("ProviderRuntimeIngestion", () => {
     expect(proposedPlan?.planMarkdown).toBe("## Buffered plan\n\n- first\n- second");
   });
 
-  it("buffers assistant deltas by default until completion", async () => {
-    const harness = await createHarness();
+  it("buffers assistant deltas when assistant streaming is disabled", async () => {
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const now = "2026-01-01T00:00:00.000Z";
 
     harness.emit({
@@ -1774,7 +1776,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("does not create assistant segments for whitespace-only buffered text at approval boundaries", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableAssistantStreaming: false },
+    });
     const startedAt = "2026-03-28T06:28:00.000Z";
     const pausedAt = "2026-03-28T06:28:01.000Z";
 

@@ -728,6 +728,40 @@ describe("incremental orchestration updates", () => {
     );
   });
 
+  it("preserves assistant message phase on live streaming message events", () => {
+    const turnId = TurnId.make("turn-1");
+    const thread = makeThread({
+      latestTurn: {
+        turnId,
+        state: "running",
+        requestedAt: "2026-02-27T00:00:00.000Z",
+        startedAt: "2026-02-27T00:00:00.000Z",
+        completedAt: null,
+        assistantMessageId: null,
+      },
+    });
+    const state = makeState(thread);
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId: MessageId.make("assistant-final-1"),
+        role: "assistant",
+        text: "stream check 1",
+        turnId,
+        phase: "final_answer",
+        streaming: true,
+        createdAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+      localEnvironmentId,
+    );
+
+    expect(threadsOf(next)[0]?.messages[0]?.phase).toBe("final_answer");
+    expect(threadsOf(next)[0]?.messages[0]?.streaming).toBe(true);
+  });
+
   it("applies replay batches in sequence and updates session state", () => {
     const thread = makeThread({
       latestTurn: {

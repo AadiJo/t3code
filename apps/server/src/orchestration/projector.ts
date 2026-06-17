@@ -404,6 +404,7 @@ export function projectEvent(
             text: payload.text,
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
             turnId: payload.turnId,
+            ...(payload.phase !== undefined ? { phase: payload.phase } : {}),
             streaming: payload.streaming,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -426,6 +427,7 @@ export function projectEvent(
                     streaming: message.streaming,
                     updatedAt: message.updatedAt,
                     turnId: message.turnId,
+                    ...(message.phase !== undefined ? { phase: message.phase } : {}),
                     ...(message.attachments !== undefined
                       ? { attachments: message.attachments }
                       : {}),
