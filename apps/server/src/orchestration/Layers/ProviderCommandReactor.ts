@@ -678,6 +678,10 @@ const make = Effect.gen(function* () {
             }
           : requestedModelSelection
         : input.modelSelection;
+    const assistantDeliveryMode: "buffered" | "streaming" = yield* Effect.map(
+      serverSettingsService.getSettings,
+      (settings) => (settings.enableAssistantStreaming ? "streaming" : "buffered"),
+    );
 
     return {
       threadId: input.threadId,
@@ -685,6 +689,7 @@ const make = Effect.gen(function* () {
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      deliveryMode: assistantDeliveryMode,
     };
   });
 

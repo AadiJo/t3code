@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { describe, it } from "vite-plus/test";
+import { describe, it } from "@effect/vitest";
 import { ThreadId } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
@@ -138,6 +138,19 @@ describe("buildTurnStartParams", () => {
       ],
     });
   });
+
+  it("preserves assistant delivery mode for turn start requests", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Stream this",
+        deliveryMode: "streaming",
+      }),
+    );
+
+    assert.equal(params.deliveryMode, "streaming");
+  });
 });
 
 describe("T3 browser developer instructions", () => {
@@ -242,28 +255,28 @@ describe("openCodexThread", () => {
     );
   });
 
-  it("propagates non-recoverable resume failures", async () => {
-    const client = {
-      request: <M extends "thread/start" | "thread/resume">(
-        method: M,
-        _payload: CodexRpc.ClientRequestParamsByMethod[M],
-      ) => {
-        if (method === "thread/resume") {
-          return Effect.fail(
-            new CodexErrors.CodexAppServerRequestError({
-              code: -32603,
-              errorMessage: "timed out waiting for server",
-            }),
+  it.effect("propagates non-recoverable resume failures", () =>
+    Effect.gen(function* () {
+      const client = {
+        request: <M extends "thread/start" | "thread/resume">(
+          method: M,
+          _payload: CodexRpc.ClientRequestParamsByMethod[M],
+        ) => {
+          if (method === "thread/resume") {
+            return Effect.fail(
+              new CodexErrors.CodexAppServerRequestError({
+                code: -32603,
+                errorMessage: "timed out waiting for server",
+              }),
+            );
+          }
+          return Effect.succeed(
+            makeThreadOpenResponse("fresh-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
           );
-        }
-        return Effect.succeed(
-          makeThreadOpenResponse("fresh-thread") as CodexRpc.ClientRequestResponsesByMethod[M],
-        );
-      },
-    };
+        },
+      };
 
-    await assert.rejects(
-      Effect.runPromise(
+      const error = yield* Effect.flip(
         openCodexThread({
           client,
           threadId: ThreadId.make("thread-1"),
@@ -273,10 +286,10 @@ describe("openCodexThread", () => {
           serviceTier: undefined,
           resumeThreadId: "stale-thread",
         }),
-      ),
-      (error: unknown) =>
-        isCodexAppServerRequestError(error) &&
-        error.errorMessage === "timed out waiting for server",
-    );
-  });
+      );
+
+      assert.ok(isCodexAppServerRequestError(error));
+      assert.equal(error.errorMessage, "timed out waiting for server");
+    }),
+  );
 });

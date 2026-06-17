@@ -15,6 +15,7 @@ import {
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ProviderApprovalDecision,
   ProviderApprovalPolicy,
+  AssistantDeliveryMode,
   ProviderInteractionMode,
   ProviderRequestKind,
   ProviderSandboxMode,
@@ -75,6 +76,7 @@ export const ProviderSendTurnInput = Schema.Struct({
   ),
   modelSelection: Schema.optional(ModelSelection),
   interactionMode: Schema.optional(ProviderInteractionMode),
+  deliveryMode: Schema.optional(AssistantDeliveryMode),
 });
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 

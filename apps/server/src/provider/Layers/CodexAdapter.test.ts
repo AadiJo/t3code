@@ -293,6 +293,14 @@ validationLayer("CodexAdapterLive validation", (it) => {
         serviceTier: "priority",
         threadId: asThreadId("thread-1"),
         runtimeMode: "full-access",
+        appServerArgs: [
+          "-c",
+          'mcp_servers.node_repl.command="node"',
+          "-c",
+          "mcp_servers.node_repl.enabled=false",
+          "-c",
+          'service_tier="priority"',
+        ],
       });
     }),
   );
@@ -351,6 +359,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         adapter.sendTurn({
           threadId: asThreadId("sess-missing"),
           input: "hello",
+          deliveryMode: "streaming",
           modelSelection: createModelSelection(ProviderInstanceId.make("codex"), "gpt-5.3-codex", [
             { id: "reasoningEffort", value: "high" },
             { id: "serviceTier", value: "priority" },
@@ -364,6 +373,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         model: "gpt-5.3-codex",
         effort: "high",
         serviceTier: "priority",
+        deliveryMode: "streaming",
       });
     }),
   );

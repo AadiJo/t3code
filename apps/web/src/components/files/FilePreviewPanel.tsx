@@ -7,7 +7,15 @@ import type {
 import type { SelectedLineRange } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
 import { EditorProvider, File, Virtualizer } from "@pierre/diffs/react";
-import { ChevronRight, Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
+import {
+  ChevronRight,
+  Code2,
+  Eye,
+  FolderTree,
+  Globe2,
+  LoaderCircle,
+  TextWrapIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
@@ -64,6 +72,7 @@ interface FilePreviewPanelProps {
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
+const FILE_SOURCE_WRAP_STORAGE_KEY = "t3code.fileSourceLineWrap";
 const FILE_SAVE_DEBOUNCE_MS = 500;
 
 interface EditableFileSurfaceProps {
@@ -73,6 +82,7 @@ interface EditableFileSurfaceProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   contents: string;
   resolvedTheme: "light" | "dark";
+  sourceLineWrap: boolean;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
 
@@ -115,6 +125,7 @@ function EditableFileSurface({
   composerDraftTarget,
   contents,
   resolvedTheme,
+  sourceLineWrap,
   onPendingChange,
 }: EditableFileSurfaceProps) {
   const addReviewComment = useComposerDraftStore((store) => store.addReviewComment);
@@ -278,9 +289,9 @@ function EditableFileSurface({
 
   return (
     <EditorProvider editor={editor}>
-      <div ref={surfaceRef} className="flex min-h-0 flex-1">
+      <div ref={surfaceRef} className="flex min-h-0 min-w-0 flex-1">
         <Virtualizer
-          className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
+          className="file-preview-virtualizer min-h-0 min-w-0 flex-1 overflow-auto"
           config={{
             overscrollSize: 600,
             intersectionObserverMargin: 1200,
@@ -299,7 +310,7 @@ function EditableFileSurface({
               onGutterUtilityClick: setSelectedRange,
               onLineSelectionChange: setSelectedRange,
               onLineSelectionEnd: handleLineSelectionEnd,
-              overflow: "scroll",
+              overflow: sourceLineWrap ? "wrap" : "scroll",
               theme: resolveDiffThemeName(resolvedTheme),
               themeType: resolvedTheme,
             }}
@@ -336,7 +347,7 @@ function RenderedMarkdownSurface({
   contents,
   threadRef,
   onPendingChange,
-}: Omit<EditableFileSurfaceProps, "resolvedTheme" | "composerDraftTarget"> & {
+}: Omit<EditableFileSurfaceProps, "resolvedTheme" | "composerDraftTarget" | "sourceLineWrap"> & {
   threadRef: ScopedThreadRef;
 }) {
   const saveCoordinator = useFileSaveCoordinator({
@@ -375,6 +386,14 @@ function initialExplorerOpen(): boolean {
   }
 }
 
+function initialSourceLineWrap(): boolean {
+  try {
+    return window.localStorage.getItem(FILE_SOURCE_WRAP_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
 export default function FilePreviewPanel({
   environmentId,
   cwd,
@@ -391,6 +410,7 @@ export default function FilePreviewPanel({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const file = useProjectFileQuery(environmentId, cwd, relativePath);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
+  const [sourceLineWrap, setSourceLineWrap] = useState(initialSourceLineWrap);
   const [renderedMarkdownPath, setRenderedMarkdownPath] = useState<string | null>(null);
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
@@ -418,6 +438,14 @@ export default function FilePreviewPanel({
       } catch {}
       return next;
     });
+  };
+
+  const toggleSourceLineWrap = (pressed: boolean) => {
+    const next = Boolean(pressed);
+    setSourceLineWrap(next);
+    try {
+      window.localStorage.setItem(FILE_SOURCE_WRAP_STORAGE_KEY, String(next));
+    } catch {}
   };
 
   const handleOpenInBrowser = () => {
@@ -524,6 +552,27 @@ export default function FilePreviewPanel({
             <TooltipTrigger
               render={
                 <Toggle
+                  className="size-7 shrink-0 border border-transparent p-0 data-pressed:border-primary/35 data-pressed:bg-primary/12 data-pressed:text-primary hover:data-pressed:bg-primary/16"
+                  pressed={sourceLineWrap}
+                  onPressedChange={toggleSourceLineWrap}
+                  aria-label={
+                    sourceLineWrap ? "Disable source line wrapping" : "Enable source line wrapping"
+                  }
+                  variant="ghost"
+                  size="sm"
+                >
+                  <TextWrapIcon className="size-3.5" />
+                </Toggle>
+              }
+            />
+            <TooltipPopup>
+              {sourceLineWrap ? "Disable source line wrapping" : "Enable source line wrapping"}
+            </TooltipPopup>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
                   className="shrink-0"
                   pressed={explorerOpen}
                   onPressedChange={toggleExplorer}
@@ -546,10 +595,10 @@ export default function FilePreviewPanel({
           Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
         </div>
       ) : null}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" data-file-preview-split>
         <div
           className={cn(
-            "min-w-0 flex-1 flex-col overflow-hidden",
+            "min-w-0 basis-0 flex-1 flex-col overflow-hidden",
             relativePath ? "flex" : "hidden",
           )}
         >
@@ -574,7 +623,7 @@ export default function FilePreviewPanel({
             ) : file.data.truncated ? (
               <Virtualizer
                 key={`${relativePath}:${resolvedTheme}:${file.data.byteLength}`}
-                className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
+                className="file-preview-virtualizer min-h-0 min-w-0 flex-1 overflow-auto"
                 config={{
                   overscrollSize: 600,
                   intersectionObserverMargin: 1200,
@@ -588,7 +637,7 @@ export default function FilePreviewPanel({
                   }}
                   options={{
                     disableFileHeader: true,
-                    overflow: "scroll",
+                    overflow: sourceLineWrap ? "wrap" : "scroll",
                     theme: resolveDiffThemeName(resolvedTheme),
                     themeType: resolvedTheme,
                   }}
@@ -604,6 +653,7 @@ export default function FilePreviewPanel({
                 composerDraftTarget={composerDraftTarget}
                 contents={file.data.contents}
                 resolvedTheme={resolvedTheme}
+                sourceLineWrap={sourceLineWrap}
                 onPendingChange={onPendingChange}
               />
             )
@@ -612,11 +662,12 @@ export default function FilePreviewPanel({
         {explorerOpen || relativePath === null ? (
           <aside
             className={cn(
-              "flex min-h-0 shrink-0 bg-background",
+              "flex min-h-0 min-w-0 shrink-0 bg-background",
               relativePath
-                ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
-                : "min-w-0 flex-1",
+                ? "w-[min(22rem,42%)] max-w-[42%] border-l border-border/60"
+                : "basis-0 flex-1",
             )}
+            data-file-preview-explorer
           >
             <FileBrowserPanel
               key={`${environmentId}:${cwd}`}

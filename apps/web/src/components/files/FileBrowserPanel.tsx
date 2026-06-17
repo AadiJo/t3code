@@ -20,12 +20,29 @@ const TREE_UNSAFE_CSS = `
   :host {
     --trees-bg-override: transparent;
     --trees-selected-bg-override: color-mix(in srgb, currentColor 12%, transparent);
+    --trees-selected-focused-border-color-override: transparent;
     --trees-hover-bg-override: color-mix(in srgb, currentColor 7%, transparent);
     --trees-border-color-override: color-mix(in srgb, currentColor 14%, transparent);
+    --trees-focus-ring-width-override: 0px;
     --trees-font-family-override: var(--font-sans);
     --trees-font-size-override: 12px;
   }
   button[data-type='item'] { border-radius: 5px; }
+  button[data-type='item'],
+  button[data-type='item'][data-active],
+  button[data-type='item'][data-current],
+  button[data-type='item'][data-focused],
+  button[data-type='item'][data-focus-visible],
+  button[data-type='item'][data-selected],
+  button[data-type='item'][aria-current],
+  button[data-type='item'][aria-selected='true'],
+  button[data-type='item']:focus,
+  button[data-type='item']:focus-within,
+  button[data-type='item']:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+  }
 `;
 
 function treePath(entry: ProjectEntry): string {

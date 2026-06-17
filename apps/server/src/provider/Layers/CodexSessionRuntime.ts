@@ -8,6 +8,7 @@ import {
   type ProviderApprovalDecision,
   type ProviderEvent,
   type ThreadGoalRequest,
+  type AssistantDeliveryMode,
   type ProviderInteractionMode,
   type ProviderRequestKind,
   type ProviderSession,
@@ -86,6 +87,7 @@ const isCodexUserInputAnswerObject = Schema.is(CodexUserInputAnswerObject);
 const CodexTurnStartParamsWithCollaborationMode = EffectCodexSchema.V2TurnStartParams.pipe(
   Schema.fieldsAssign({
     collaborationMode: Schema.optionalKey(EffectCodexSchema.V2TurnStartParams__CollaborationMode),
+    deliveryMode: Schema.optionalKey(Schema.Literals(["buffered", "streaming"])),
   }),
 );
 const decodeCodexTurnStartParamsWithCollaborationMode = Schema.decodeUnknownEffect(
@@ -126,6 +128,7 @@ export interface CodexSessionRuntimeSendTurnInput {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly deliveryMode?: AssistantDeliveryMode;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -366,6 +369,7 @@ export function buildTurnStartParams(input: {
   readonly serviceTier?: CodexServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly deliveryMode?: AssistantDeliveryMode;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -402,6 +406,7 @@ export function buildTurnStartParams(input: {
     ...(shouldIncludeServiceTier && input.serviceTier ? { serviceTier: input.serviceTier } : {}),
     ...(shouldIncludeEffort && input.effort ? { effort: input.effort } : {}),
     ...(collaborationMode ? { collaborationMode } : {}),
+    ...(input.deliveryMode ? { deliveryMode: input.deliveryMode } : {}),
   }).pipe(
     Effect.mapError((error) => toProtocolParseError("Invalid turn/start request payload", error)),
   );
@@ -1298,6 +1303,7 @@ export const makeCodexSessionRuntime = (
             ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
             ...(input.effort ? { effort: input.effort } : {}),
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+            ...(input.deliveryMode ? { deliveryMode: input.deliveryMode } : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
           const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(
