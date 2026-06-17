@@ -15,6 +15,7 @@ import {
   type ProviderEvent,
   ProviderInstanceId,
   type ProviderRuntimeEvent,
+  type ProviderSession,
   type ProviderRequestKind,
   type ThreadTokenUsageSnapshot,
   type ProviderUserInputAnswers,
@@ -26,6 +27,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Crypto from "effect/Crypto";
+import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -1365,8 +1367,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const sessions = new Map<ThreadId, CodexAdapterSessionContext>();
+  const pendingSessionStarts = new Map<
+    ThreadId,
+    Deferred.Deferred<ProviderSession, ProviderAdapterError>
+  >();
 
-  const startSession: CodexAdapterShape["startSession"] = (input) =>
+  const startSessionUncached: CodexAdapterShape["startSession"] = (input) =>
     Effect.scoped(
       Effect.gen(function* () {
         if (input.provider !== undefined && input.provider !== PROVIDER) {
@@ -1386,7 +1392,29 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           input.modelSelection?.instanceId === boundInstanceId
             ? getCodexServiceTierOptionValue(input.modelSelection)
             : undefined;
+        const reasoningEffort =
+          input.modelSelection?.instanceId === boundInstanceId
+            ? getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort")
+            : undefined;
         const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+        const appServerArgs = [
+          "-c",
+          'mcp_servers.node_repl.command="node"',
+          "-c",
+          "mcp_servers.node_repl.enabled=false",
+          ...(mcpSession
+            ? [
+                "-c",
+                `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
+                "-c",
+                'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+              ]
+            : []),
+          ...(reasoningEffort
+            ? ["-c", `model_reasoning_effort="${reasoningEffort}"`]
+            : []),
+          ...(serviceTier ? ["-c", `service_tier="${serviceTier}"`] : []),
+        ];
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
           providerInstanceId: boundInstanceId,
@@ -1408,14 +1436,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                   ...(options?.environment ?? process.env),
                   T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
                 },
-                appServerArgs: [
-                  "-c",
-                  `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
-                  "-c",
-                  'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
-                ],
               }
             : {}),
+          appServerArgs,
         };
         const sessionScope = yield* Scope.make("sequential");
         let sessionScopeTransferred = false;
@@ -1453,7 +1476,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             }
             yield* Queue.offerAll(runtimeEventQueue, runtimeEvents);
           }),
-        ).pipe(Effect.forkChild);
+        ).pipe(Effect.forkIn(sessionScope));
 
         const started = yield* runtime.start().pipe(
           Effect.mapError(
@@ -1486,6 +1509,27 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         return started;
       }),
     );
+
+  const startSession: CodexAdapterShape["startSession"] = (input) =>
+    Effect.gen(function* () {
+      const pending = pendingSessionStarts.get(input.threadId);
+      if (pending) {
+        return yield* Deferred.await(pending);
+      }
+
+      const deferred = yield* Deferred.make<ProviderSession, ProviderAdapterError>();
+      pendingSessionStarts.set(input.threadId, deferred);
+
+      return yield* startSessionUncached(input).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            if (pendingSessionStarts.get(input.threadId) === deferred) {
+              pendingSessionStarts.delete(input.threadId);
+            }
+          }).pipe(Effect.andThen(Deferred.done(deferred, exit))),
+        ),
+      );
+    });
 
   const resolveAttachment = Effect.fn("resolveAttachment")(function* (
     input: ProviderSendTurnInput,

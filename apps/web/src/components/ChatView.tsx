@@ -3890,10 +3890,11 @@ function ChatViewContent(props: ChatViewProps) {
       }
 
       const turnAttachments = await turnAttachmentsPromise;
+      const shouldBootstrapCreateThread = isLocalDraftThread && !draftThread?.promotedTo;
       const bootstrap =
-        isLocalDraftThread || baseBranchForWorktree
+        shouldBootstrapCreateThread || baseBranchForWorktree
           ? {
-              ...(isLocalDraftThread
+              ...(shouldBootstrapCreateThread
                 ? {
                     createThread: {
                       projectId: activeProject.id,
@@ -4687,6 +4688,7 @@ function ChatViewContent(props: ChatViewProps) {
               <MessagesTimeline
                 key={activeThread.id}
                 isWorking={isWorking}
+                workingPhase={phase === "running" ? "running" : "starting"}
                 activeTurnInProgress={isWorking || !latestTurnSettled}
                 activeTurnStartedAt={activeWorkStartedAt}
                 listRef={legendListRef}

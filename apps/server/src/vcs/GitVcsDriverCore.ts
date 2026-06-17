@@ -101,6 +101,7 @@ interface ExecuteGitOptions {
   maxOutputBytes?: number | undefined;
   appendTruncationMarker?: boolean | undefined;
   progress?: GitVcsDriver.ExecuteGitProgress | undefined;
+  trace?: boolean | undefined;
 }
 
 function parseBranchAb(value: string): { ahead: number; behind: number } {
@@ -776,8 +777,8 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     cwd: string,
     args: readonly string[],
     options: ExecuteGitOptions = {},
-  ): Effect.Effect<GitVcsDriver.ExecuteGitResult, GitCommandError> =>
-    execute({
+  ): Effect.Effect<GitVcsDriver.ExecuteGitResult, GitCommandError> => {
+    const input = {
       operation,
       cwd,
       args,
@@ -790,7 +791,21 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         ? { appendTruncationMarker: options.appendTruncationMarker }
         : {}),
       ...(options.progress ? { progress: options.progress } : {}),
-    }).pipe(
+    };
+    const run =
+      options.trace === false
+        ? executeRaw(input).pipe(
+            withMetrics({
+              counter: gitCommandsTotal,
+              timer: gitCommandDuration,
+              attributes: {
+                operation,
+              },
+            }),
+          )
+        : execute(input);
+
+    return run.pipe(
       Effect.flatMap((result) => {
         if (options.allowNonZeroExit || result.exitCode === 0) {
           return Effect.succeed(result);
@@ -814,6 +829,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         );
       }),
     );
+  };
 
   const runGit = (
     operation: string,
@@ -917,6 +933,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
         allowNonZeroExit: true,
         env: STATUS_UPSTREAM_REFRESH_ENV,
         timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
+        trace: false,
       },
     ).pipe(Effect.asVoid);
   };

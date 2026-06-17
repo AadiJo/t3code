@@ -1336,7 +1336,7 @@ function createDraftThreadState(
         : projectChanged
           ? "local"
           : (existingThread?.envMode ?? "local")),
-    promotedTo: null,
+    promotedTo: existingThread?.promotedTo ?? null,
   };
 }
 
@@ -2175,6 +2175,9 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               draftSession.environmentId === threadRef.environmentId &&
               draftSession.threadId === threadRef.threadId
             ) {
+              return draftSession;
+            }
+            if (scopedThreadRefsEqual(draftSession.promotedTo, threadRef)) {
               return draftSession;
             }
           }

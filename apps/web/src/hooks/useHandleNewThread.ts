@@ -1,13 +1,19 @@
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime";
-import { DEFAULT_RUNTIME_MODE, type ScopedProjectRef } from "@t3tools/contracts";
+import {
+  DEFAULT_RUNTIME_MODE,
+  type ScopedProjectRef,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import { useParams, useRouter } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
+  DraftId,
   type DraftThreadEnvMode,
   type DraftThreadState,
   useComposerDraftStore,
 } from "../composerDraftStore";
+import { threadHasConversationContent } from "../components/ChatView.logic";
 import { newDraftId, newThreadId } from "../lib/utils";
 import { orderItemsByPreferredIds } from "../components/Sidebar.logic";
 import {
@@ -15,10 +21,20 @@ import {
   getProjectOrderKey,
   selectProjectGroupingSettings,
 } from "../logicalProject";
-import { selectProjectsAcrossEnvironments, useStore } from "../store";
+import {
+  selectProjectsAcrossEnvironments,
+  selectSidebarThreadSummaryByRef,
+  selectThreadByRef,
+  useStore,
+} from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
-import { resolveThreadRouteTarget } from "../threadRoutes";
+import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
 import { useUiStateStore } from "../uiStateStore";
+import {
+  activatePrewarmedDraftThreadSession,
+  ensurePrewarmedDraftThreadSession,
+  prewarmDraftThreadSession,
+} from "../draftThreadPrewarm";
 import { useSettings } from "./useSettings";
 
 function useNewThreadState() {
@@ -37,8 +53,10 @@ function useNewThreadState() {
         branch?: string | null;
         worktreePath?: string | null;
         envMode?: DraftThreadEnvMode;
+        prewarmOnly?: boolean;
       },
     ): Promise<void> => {
+      const draftStoreState = useComposerDraftStore.getState();
       const {
         getDraftSessionByLogicalProjectKey,
         getDraftSession,
@@ -46,7 +64,7 @@ function useNewThreadState() {
         applyStickyState,
         setDraftThreadContext,
         setLogicalProjectDraftThreadId,
-      } = useComposerDraftStore.getState();
+      } = draftStoreState;
       const currentRouteTarget = getCurrentRouteTarget();
       const project = projects.find(
         (candidate) =>
@@ -56,17 +74,109 @@ function useNewThreadState() {
       const logicalProjectKey = project
         ? deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings)
         : scopedProjectKey(projectRef);
+      const serverThreadRefHasConversationContent = (threadRef: ScopedThreadRef): boolean => {
+        const serverThread = selectThreadByRef(useStore.getState(), threadRef);
+        if (threadHasConversationContent(serverThread)) {
+          return true;
+        }
+        const sidebarThread = selectSidebarThreadSummaryByRef(useStore.getState(), threadRef);
+        return (
+          (sidebarThread?.latestUserMessageAt !== null &&
+            sidebarThread?.latestUserMessageAt !== undefined) ||
+          (sidebarThread?.latestTurn !== null && sidebarThread?.latestTurn !== undefined)
+        );
+      };
       const hasBranchOption = options?.branch !== undefined;
       const hasWorktreePathOption = options?.worktreePath !== undefined;
       const hasEnvModeOption = options?.envMode !== undefined;
-      const storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
+      let storedDraftThread = getDraftSessionByLogicalProjectKey(logicalProjectKey);
+      if (!storedDraftThread) {
+        for (const [draftId, draftThread] of Object.entries(
+          draftStoreState.draftThreadsByThreadKey,
+        )) {
+          if (
+            draftThread.logicalProjectKey !== logicalProjectKey ||
+            draftThread.projectId !== projectRef.projectId ||
+            draftThread.environmentId !== projectRef.environmentId ||
+            !draftThread.promotedTo
+          ) {
+            continue;
+          }
+          const promotedThreadRef = {
+            environmentId: draftThread.promotedTo.environmentId,
+            threadId: draftThread.promotedTo.threadId,
+          };
+          if (serverThreadRefHasConversationContent(promotedThreadRef)) {
+            continue;
+          }
+          storedDraftThread = {
+            ...draftThread,
+            draftId: DraftId.make(draftId),
+          };
+          break;
+        }
+      }
       const latestActiveDraftThread: DraftThreadState | null = currentRouteTarget
         ? currentRouteTarget.kind === "server"
           ? getDraftThread(currentRouteTarget.threadRef)
           : getDraftSession(currentRouteTarget.draftId)
         : null;
+      const currentServerThread =
+        currentRouteTarget?.kind === "server"
+          ? selectThreadByRef(useStore.getState(), currentRouteTarget.threadRef)
+          : null;
+      const currentServerThreadProject = currentServerThread
+        ? projects.find(
+            (candidate) =>
+              candidate.id === currentServerThread.projectId &&
+              candidate.environmentId === currentServerThread.environmentId,
+          )
+        : null;
+      const currentServerThreadLogicalProjectKey = currentServerThreadProject
+        ? deriveLogicalProjectKeyFromSettings(currentServerThreadProject, projectGroupingSettings)
+        : currentServerThread
+          ? scopedProjectKey(
+              scopeProjectRef(currentServerThread.environmentId, currentServerThread.projectId),
+            )
+          : null;
+
+      if (
+        currentRouteTarget?.kind === "draft" &&
+        latestActiveDraftThread?.logicalProjectKey === logicalProjectKey
+      ) {
+        return Promise.resolve();
+      }
+
+      if (
+        currentRouteTarget?.kind === "server" &&
+        currentServerThreadLogicalProjectKey === logicalProjectKey &&
+        !threadHasConversationContent(currentServerThread)
+      ) {
+        return Promise.resolve();
+      }
+
+      if (
+        currentRouteTarget?.kind === "server" &&
+        latestActiveDraftThread?.logicalProjectKey === logicalProjectKey &&
+        latestActiveDraftThread.promotedTo?.environmentId ===
+          currentRouteTarget.threadRef.environmentId &&
+        latestActiveDraftThread.promotedTo.threadId === currentRouteTarget.threadRef.threadId &&
+        !threadHasConversationContent(currentServerThread)
+      ) {
+        return Promise.resolve();
+      }
       if (storedDraftThread) {
         return (async () => {
+          if (options?.prewarmOnly) {
+            if (storedDraftThread.promotedTo) {
+              void ensurePrewarmedDraftThreadSession(storedDraftThread);
+            } else if (project) {
+              prewarmDraftThreadSession(storedDraftThread, project, {
+                hideCreatedThread: true,
+              });
+            }
+            return;
+          }
           if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
             setDraftThreadContext(storedDraftThread.draftId, {
               ...(hasBranchOption ? { branch: options?.branch ?? null } : {}),
@@ -81,6 +191,22 @@ function useNewThreadState() {
             currentRouteTarget?.kind === "draft" &&
             currentRouteTarget.draftId === storedDraftThread.draftId
           ) {
+            return;
+          }
+          await activatePrewarmedDraftThreadSession(storedDraftThread, {
+            waitForPending: true,
+          });
+          const latestStoredDraftThread =
+            useComposerDraftStore.getState().getDraftSession(storedDraftThread.draftId) ??
+            storedDraftThread;
+          const promotedServerThread = latestStoredDraftThread.promotedTo
+            ? selectThreadByRef(useStore.getState(), latestStoredDraftThread.promotedTo)
+            : null;
+          if (latestStoredDraftThread.promotedTo && promotedServerThread) {
+            await router.navigate({
+              to: "/$environmentId/$threadId",
+              params: buildThreadRouteParams(latestStoredDraftThread.promotedTo),
+            });
             return;
           }
           await router.navigate({
@@ -128,6 +254,15 @@ function useNewThreadState() {
           runtimeMode: DEFAULT_RUNTIME_MODE,
         });
         applyStickyState(draftId);
+        const draftSession = useComposerDraftStore.getState().getDraftSession(draftId);
+        if (draftSession && project) {
+          prewarmDraftThreadSession(draftSession, project, {
+            hideCreatedThread: options?.prewarmOnly === true,
+          });
+        }
+        if (options?.prewarmOnly) {
+          return;
+        }
 
         await router.navigate({
           to: "/draft/$draftId",

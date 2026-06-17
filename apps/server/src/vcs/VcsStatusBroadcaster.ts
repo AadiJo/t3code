@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -323,9 +324,10 @@ export const layer = Layer.effect(
             (count) => count + 1,
           );
           const nextDelay = remoteRefreshFailureDelay(consecutiveFailures, activeInterval);
+          const failure = Cause.squash(exit.cause);
           yield* Effect.logWarning("VCS remote status refresh failed", {
             cwd,
-            detail: exit.cause.toString(),
+            detail: failure instanceof Error ? failure.message : String(failure),
             consecutiveFailures,
             nextDelayMs: Duration.toMillis(nextDelay),
           });

@@ -802,6 +802,16 @@ describe("composerDraftStore project draft thread mapping", () => {
     expect(store.getComposerDraft(threadRef)?.prompt).toBe("scoped access");
   });
 
+  it("resolves a promoted draft through its promoted server thread ref", () => {
+    const store = useComposerDraftStore.getState();
+    const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    markPromotedDraftThreadByRef(threadRef);
+
+    expect(store.getDraftThreadByRef(threadRef)?.promotedTo).toEqual(threadRef);
+  });
+
   it("does not clear composer drafts for existing server threads during promotion cleanup", () => {
     const store = useComposerDraftStore.getState();
     const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);

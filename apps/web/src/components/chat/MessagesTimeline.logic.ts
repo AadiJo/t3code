@@ -308,6 +308,7 @@ export function deriveMessagesTimelineRows(input: {
   latestTurn?: TimelineLatestTurn | null;
   expandedTurnIds?: ReadonlySet<TurnId>;
   isWorking: boolean;
+  workingPhase?: "starting" | "running";
   activeTurnStartedAt: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
@@ -432,7 +433,7 @@ export function deriveMessagesTimelineRows(input: {
       kind: "working",
       id: "working-indicator-row",
       createdAt: input.activeTurnStartedAt,
-      phase: deriveWorkingPhase(input.latestTurn),
+      phase: input.workingPhase === "running" ? "running" : deriveWorkingPhase(input.latestTurn),
     });
   }
 

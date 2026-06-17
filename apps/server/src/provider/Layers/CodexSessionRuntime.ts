@@ -63,10 +63,6 @@ const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "does not exist",
 ];
 
-export function hasConfiguredMcpServer(appServerArgs: ReadonlyArray<string> | undefined): boolean {
-  return appServerArgs?.some((argument) => argument.includes("mcp_servers.")) === true;
-}
-
 export const CodexResumeCursorSchema = Schema.Struct({
   threadId: Schema.String,
 });
@@ -329,7 +325,7 @@ function buildCodexCollaborationMode(input: {
   readonly model?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
-  if (input.interactionMode === undefined) {
+  if (input.interactionMode === undefined || input.interactionMode === "default") {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
@@ -374,10 +370,15 @@ export function buildTurnStartParams(input: {
   }
 
   const config = runtimeModeToThreadConfig(input.runtimeMode);
+  const normalizedModel = normalizeCodexModelSlug(input.model);
+  const shouldIncludeModel = normalizedModel !== undefined && normalizedModel !== DEFAULT_MODEL;
+  const shouldIncludeServiceTier =
+    input.serviceTier !== undefined && input.serviceTier !== "default";
+  const shouldIncludeEffort = input.effort !== undefined && input.effort !== "medium";
   const collaborationMode = buildCodexCollaborationMode({
     ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
-    ...(input.model ? { model: input.model } : {}),
-    ...(input.effort ? { effort: input.effort } : {}),
+    ...(shouldIncludeModel && input.model ? { model: input.model } : {}),
+    ...(shouldIncludeEffort && input.effort ? { effort: input.effort } : {}),
   });
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
@@ -385,9 +386,9 @@ export function buildTurnStartParams(input: {
     input: turnInput,
     approvalPolicy: config.approvalPolicy,
     sandboxPolicy: runtimeModeToTurnSandboxPolicy(input.runtimeMode),
-    ...(input.model ? { model: input.model } : {}),
-    ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
-    ...(input.effort ? { effort: input.effort } : {}),
+    ...(shouldIncludeModel && input.model ? { model: input.model } : {}),
+    ...(shouldIncludeServiceTier && input.serviceTier ? { serviceTier: input.serviceTier } : {}),
+    ...(shouldIncludeEffort && input.effort ? { effort: input.effort } : {}),
     ...(collaborationMode ? { collaborationMode } : {}),
   }).pipe(
     Effect.mapError((error) => toProtocolParseError("Invalid turn/start request payload", error)),
@@ -1268,15 +1269,6 @@ export const makeCodexSessionRuntime = (
       sendTurn: (input) =>
         Effect.gen(function* () {
           const providerThreadId = yield* readProviderThreadId;
-          if (hasConfiguredMcpServer(options.appServerArgs)) {
-            yield* client.request("config/mcpServer/reload", undefined).pipe(
-              Effect.catch((cause) =>
-                Effect.logWarning("Failed to refresh Codex MCP tool catalog before turn.", {
-                  cause,
-                }),
-              ),
-            );
-          }
           const normalizedModel = normalizeCodexModelSlug(
             input.model ?? (yield* Ref.get(sessionRef)).model,
           );

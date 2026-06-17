@@ -96,8 +96,9 @@ import { useModelPickerOpen } from "../modelPickerOpenState";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { useVcsStatus } from "../lib/vcsStatusState";
 import { readLocalApi } from "../localApi";
-import { useComposerDraftStore } from "../composerDraftStore";
+import { useComposerDraftStore, type DraftThreadState } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { isHiddenPrewarmedThreadRef } from "../draftThreadPrewarm";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -209,6 +210,28 @@ import {
 } from "../sidebarProjectGrouping";
 import { SidebarProviderUpdatePill } from "./sidebar/SidebarProviderUpdatePill";
 import { openDiscoveredPort } from "./preview/openDiscoveredPort";
+
+function isInactiveEmptyPromotedDraftThread(input: {
+  thread: SidebarThreadSummary;
+  activeRouteThreadKey: string | null;
+  draftThreadsByThreadKey: Readonly<Record<string, DraftThreadState>>;
+}): boolean {
+  const threadRef = scopeThreadRef(input.thread.environmentId, input.thread.id);
+  const threadKey = scopedThreadKey(threadRef);
+  if (input.activeRouteThreadKey === threadKey || input.thread.latestUserMessageAt !== null) {
+    return false;
+  }
+
+  return Object.values(input.draftThreadsByThreadKey).some((draftThread) => {
+    const promotedTo = draftThread.promotedTo;
+    return (
+      promotedTo !== null &&
+      promotedTo !== undefined &&
+      promotedTo.environmentId === threadRef.environmentId &&
+      promotedTo.threadId === threadRef.threadId
+    );
+  });
+}
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -223,6 +246,7 @@ const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   easing: "ease-out",
 } as const;
 const EMPTY_THREAD_JUMP_LABELS = new Map<string, string>();
+const SIDEBAR_NEW_THREAD_BACKGROUND_PREWARM_LIMIT = 2;
 const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
   repository: "Group by repository",
   repository_path: "Group by repository path",
@@ -1046,6 +1070,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const sidebarThreadPreviewCount = useSettings<SidebarThreadPreviewCount>(
     (settings) => settings.sidebarThreadPreviewCount,
   );
+  const draftThreadsByThreadKey = useComposerDraftStore((state) => state.draftThreadsByThreadKey);
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
@@ -1216,7 +1241,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     };
     const visibleProjectThreads = sortThreads(
-      projectThreads.filter((thread) => thread.archivedAt === null),
+      projectThreads.filter(
+        (thread) =>
+          thread.archivedAt === null &&
+          !isHiddenPrewarmedThreadRef(scopeThreadRef(thread.environmentId, thread.id)) &&
+          !isInactiveEmptyPromotedDraftThread({
+            thread,
+            activeRouteThreadKey,
+            draftThreadsByThreadKey,
+          }),
+      ),
       threadSortOrder,
     );
     const projectStatus = resolveProjectStatusIndicator(
@@ -1229,7 +1263,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       projectStatus,
       visibleProjectThreads,
     };
-  }, [projectThreads, threadLastVisitedAts, threadSortOrder]);
+  }, [
+    activeRouteThreadKey,
+    draftThreadsByThreadKey,
+    projectThreads,
+    threadLastVisitedAts,
+    threadSortOrder,
+  ]);
 
   const pinnedCollapsedThread = useMemo(() => {
     const activeThreadKey = activeRouteThreadKey ?? undefined;
@@ -2814,6 +2854,43 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     attachProjectListAutoAnimateRef,
     projectsLength,
   } = props;
+  const defaultThreadEnvMode = useSettings<ThreadEnvMode>(
+    (settings) => settings.defaultThreadEnvMode,
+  );
+  const pathname = useLocation({ select: (loc) => loc.pathname });
+  const backgroundPrewarmProjectKeysRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const prewarmEnvMode = resolveSidebarNewThreadEnvMode({
+      defaultEnvMode: defaultThreadEnvMode,
+    });
+    if (pathname !== "/") {
+      backgroundPrewarmProjectKeysRef.current.clear();
+      return;
+    }
+    if (prewarmEnvMode !== "local") {
+      return;
+    }
+
+    for (const project of sortedProjects.slice(0, SIDEBAR_NEW_THREAD_BACKGROUND_PREWARM_LIMIT)) {
+      const member = project.memberProjects[0];
+      if (!member) {
+        continue;
+      }
+      const prewarmProjectKey = `${project.projectKey}:${member.environmentId}:${member.id}`;
+      if (backgroundPrewarmProjectKeysRef.current.has(prewarmProjectKey)) {
+        continue;
+      }
+      if (window.location.pathname !== "/") {
+        break;
+      }
+      backgroundPrewarmProjectKeysRef.current.add(prewarmProjectKey);
+      void handleNewThread(scopeProjectRef(member.environmentId, member.id), {
+        envMode: prewarmEnvMode,
+        prewarmOnly: true,
+      });
+    }
+  }, [defaultThreadEnvMode, handleNewThread, pathname, sortedProjects]);
 
   const handleProjectSortOrderChange = useCallback(
     (sortOrder: SidebarProjectSortOrder) => {

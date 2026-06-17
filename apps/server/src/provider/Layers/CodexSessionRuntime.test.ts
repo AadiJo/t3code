@@ -13,7 +13,6 @@ import {
 } from "../CodexDeveloperInstructions.ts";
 import {
   buildTurnStartParams,
-  hasConfiguredMcpServer,
   isRecoverableThreadResumeError,
   openCodexThread,
 } from "./CodexSessionRuntime.ts";
@@ -68,7 +67,6 @@ describe("buildTurnStartParams", () => {
         },
       ],
       model: "gpt-5.3-codex",
-      effort: "medium",
       collaborationMode: {
         mode: "plan",
         settings: {
@@ -80,7 +78,7 @@ describe("buildTurnStartParams", () => {
     });
   });
 
-  it("includes default collaboration mode and image attachments", () => {
+  it("omits default collaboration mode and keeps image attachments", () => {
     const params = Effect.runSync(
       buildTurnStartParams({
         threadId: "provider-thread-1",
@@ -114,14 +112,6 @@ describe("buildTurnStartParams", () => {
         },
       ],
       model: "gpt-5.3-codex",
-      collaborationMode: {
-        mode: "default",
-        settings: {
-          model: "gpt-5.3-codex",
-          reasoning_effort: "medium",
-          developer_instructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
-        },
-      },
     });
   });
 
@@ -161,17 +151,6 @@ describe("T3 browser developer instructions", () => {
       assert.match(instructions, /preview_open/);
       assert.match(instructions, /Do not switch to global browser skills/);
     }
-  });
-});
-
-describe("hasConfiguredMcpServer", () => {
-  it("detects inline Codex MCP configuration arguments", () => {
-    assert.equal(hasConfiguredMcpServer(undefined), false);
-    assert.equal(hasConfiguredMcpServer(["--model", "gpt-5.4"]), false);
-    assert.equal(
-      hasConfiguredMcpServer(["-c", 'mcp_servers.t3-code.url="http://127.0.0.1/mcp"']),
-      true,
-    );
   });
 });
 

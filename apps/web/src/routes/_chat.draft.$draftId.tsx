@@ -1,12 +1,24 @@
+import { scopeProjectRef } from "@t3tools/client-runtime";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import ChatView from "../components/ChatView";
-import { threadHasStarted } from "../components/ChatView.logic";
-import { useComposerDraftStore, DraftId } from "../composerDraftStore";
+import { threadHasConversationContent } from "../components/ChatView.logic";
+import { useComposerDraftStore, DraftId, type DraftSessionState } from "../composerDraftStore";
 import { SidebarInset } from "../components/ui/sidebar";
-import { createThreadSelectorAcrossEnvironments } from "../storeSelectors";
+import {
+  createProjectSelectorByRef,
+  createThreadSelectorAcrossEnvironments,
+} from "../storeSelectors";
 import { useStore } from "../store";
 import { buildThreadRouteParams } from "../threadRoutes";
+import { readEnvironmentApi } from "../environmentApi";
+import { newCommandId } from "../lib/utils";
+import type { Thread } from "../types";
+import {
+  deletePrewarmedDraftThreadId,
+  ensurePrewarmedDraftThreadSession,
+  prewarmDraftThreadSession,
+} from "../draftThreadPrewarm";
 
 function DraftChatThreadRouteView() {
   const navigate = useNavigate();
@@ -19,7 +31,19 @@ function DraftChatThreadRouteView() {
       [draftSession?.threadId],
     ),
   );
-  const serverThreadStarted = threadHasStarted(serverThread);
+  const cleanupStateRef = useRef<{
+    draftSession: DraftSessionState | null;
+    serverThread: Thread | null | undefined;
+  }>({ draftSession: null, serverThread: undefined });
+  const draftProjectRef = useMemo(
+    () =>
+      draftSession ? scopeProjectRef(draftSession.environmentId, draftSession.projectId) : null,
+    [draftSession],
+  );
+  const draftProject = useStore(
+    useMemo(() => createProjectSelectorByRef(draftProjectRef), [draftProjectRef]),
+  );
+  const serverThreadStarted = threadHasConversationContent(serverThread);
   const canonicalThreadRef = useMemo(
     () =>
       draftSession?.promotedTo
@@ -45,6 +69,54 @@ function DraftChatThreadRouteView() {
       replace: true,
     });
   }, [canonicalThreadRef, navigate]);
+
+  useEffect(() => {
+    cleanupStateRef.current = { draftSession, serverThread };
+  }, [draftSession, serverThread]);
+
+  useEffect(() => {
+    return () => {
+      const { draftSession: latestDraftSession, serverThread: latestServerThread } =
+        cleanupStateRef.current;
+      if (
+        !latestDraftSession?.promotedTo ||
+        !latestServerThread ||
+        latestServerThread.messages.length > 0
+      ) {
+        return;
+      }
+
+      const api = readEnvironmentApi(latestDraftSession.environmentId);
+      void api?.orchestration
+        .dispatchCommand({
+          type: "thread.delete",
+          commandId: newCommandId(),
+          threadId: latestDraftSession.threadId,
+        })
+        .catch(() => undefined);
+      useComposerDraftStore.getState().clearDraftThread(draftId);
+      deletePrewarmedDraftThreadId(latestDraftSession);
+    };
+  }, [draftId]);
+
+  useEffect(() => {
+    if (!draftSession || serverThread || draftSession.envMode !== "local" || !draftProject) {
+      return;
+    }
+    prewarmDraftThreadSession(draftSession, draftProject);
+  }, [draftProject, draftSession, serverThread]);
+
+  useEffect(() => {
+    if (
+      !draftSession ||
+      !serverThread ||
+      draftSession.envMode !== "local" ||
+      threadHasConversationContent(serverThread)
+    ) {
+      return;
+    }
+    void ensurePrewarmedDraftThreadSession(draftSession);
+  }, [draftSession, serverThread]);
 
   useEffect(() => {
     if (draftSession || canonicalThreadRef) {

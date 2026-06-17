@@ -250,9 +250,11 @@ export function buildExpiredTerminalContextToastCopy(
 }
 
 export function threadHasStarted(thread: Thread | null | undefined): boolean {
-  return Boolean(
-    thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),
-  );
+  return Boolean(thread && (threadHasConversationContent(thread) || thread.session !== null));
+}
+
+export function threadHasConversationContent(thread: Thread | null | undefined): boolean {
+  return Boolean(thread && (thread.latestTurn !== null || thread.messages.length > 0));
 }
 
 // `threadProvider` is the open branded driver kind carried by the session.

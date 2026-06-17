@@ -685,6 +685,30 @@ describe("deriveMessagesTimelineRows", () => {
     });
   });
 
+  it("uses the explicit running phase for optimistic turn starts", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [],
+      latestTurn: {
+        turnId: "turn-1" as never,
+        state: "completed",
+        startedAt: "2026-01-01T00:00:00Z",
+        completedAt: "2026-01-01T00:00:22Z",
+      },
+      isWorking: true,
+      workingPhase: "running",
+      activeTurnStartedAt: "2026-01-01T00:01:00Z",
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    const workingRow = rows.find((row) => row.id === "working-indicator-row");
+    expect(workingRow).toMatchObject({
+      kind: "working",
+      createdAt: "2026-01-01T00:01:00Z",
+      phase: "running",
+    });
+  });
+
   it("does not fold the active in-progress turn", () => {
     const rows = deriveMessagesTimelineRows({
       timelineEntries: [

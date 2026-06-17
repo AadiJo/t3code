@@ -4,6 +4,7 @@ import {
   EventId,
   type ModelSelection,
   type OrchestrationEvent,
+  type OrchestrationThread,
   ProviderDriverKind,
   type ProjectId,
   type OrchestrationSession,
@@ -53,6 +54,7 @@ type ProviderIntentEvent = Extract<
       | "thread.turn-interrupt-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
+      | "thread.session-start-requested"
       | "thread.session-stop-requested";
   }
 >;
@@ -305,6 +307,44 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const setThreadSessionRunningForTurnStart = Effect.fnUntraced(function* (input: {
+    readonly threadId: ThreadId;
+    readonly thread: OrchestrationThread;
+    readonly modelSelection?: ModelSelection;
+    readonly runtimeMode: RuntimeMode;
+    readonly preferRequestedIdentity?: boolean;
+    readonly createdAt: string;
+  }) {
+    const existingSession = input.thread.session;
+    const modelSelection = input.modelSelection ?? input.thread.modelSelection;
+    const shouldUseRequestedIdentity =
+      input.preferRequestedIdentity === true ||
+      existingSession === null ||
+      existingSession.status === "stopped";
+    const providerName =
+      input.modelSelection !== undefined && shouldUseRequestedIdentity
+        ? toNonEmptyProviderInput(modelSelection.instanceId)
+        : (existingSession?.providerName ?? toNonEmptyProviderInput(modelSelection.instanceId));
+    const providerInstanceId =
+      input.modelSelection !== undefined && shouldUseRequestedIdentity
+        ? modelSelection.instanceId
+        : (existingSession?.providerInstanceId ?? modelSelection.instanceId);
+    yield* setThreadSession({
+      threadId: input.threadId,
+      session: {
+        threadId: input.threadId,
+        status: "running",
+        providerName: providerName ?? null,
+        providerInstanceId,
+        runtimeMode: existingSession?.runtimeMode ?? input.runtimeMode,
+        activeTurnId: null,
+        lastError: null,
+        updatedAt: input.createdAt,
+      },
+      createdAt: input.createdAt,
+    });
+  });
+
   const resolveProject = Effect.fnUntraced(function* (projectId: ProjectId) {
     return yield* projectionSnapshotQuery
       .getProjectShellById(projectId)
@@ -428,7 +468,9 @@ const make = Effect.gen(function* () {
       });
     }
     const preferredProvider: ProviderDriverKind = desiredDriverKind;
-    if (thread.session !== null) {
+    const hasStartedThreadSession =
+      activeThreadSession !== null || thread.session?.status === "stopped";
+    if (hasStartedThreadSession) {
       yield* rejectStartedThreadModelChangeIfRequired({
         threadId,
         currentModelSelection:
@@ -443,7 +485,7 @@ const make = Effect.gen(function* () {
       });
     }
     if (
-      thread.session !== null &&
+      hasStartedThreadSession &&
       requestedModelSelection !== undefined &&
       requestedModelSelection.instanceId !== currentInstanceId
     ) {
@@ -801,6 +843,18 @@ const make = Effect.gen(function* () {
       }
     }
 
+    if (thread.session?.status !== "stopped") {
+      yield* setThreadSessionRunningForTurnStart({
+        threadId: event.payload.threadId,
+        thread,
+        ...(event.payload.modelSelection !== undefined
+          ? { modelSelection: event.payload.modelSelection }
+          : {}),
+        runtimeMode: event.payload.runtimeMode,
+        createdAt: event.payload.createdAt,
+      });
+    }
+
     const handleTurnStartFailure = (cause: Cause.Cause<unknown>) => {
       if (Cause.hasInterruptsOnly(cause)) {
         return Effect.void;
@@ -853,6 +907,20 @@ const make = Effect.gen(function* () {
 
     if (Option.isNone(sendTurnRequest)) {
       return;
+    }
+
+    const threadBeforeSend = yield* resolveThread(event.payload.threadId);
+    if (threadBeforeSend) {
+      yield* setThreadSessionRunningForTurnStart({
+        threadId: event.payload.threadId,
+        thread: threadBeforeSend,
+        ...(event.payload.modelSelection !== undefined
+          ? { modelSelection: event.payload.modelSelection }
+          : {}),
+        runtimeMode: event.payload.runtimeMode,
+        preferRequestedIdentity: true,
+        createdAt: event.payload.createdAt,
+      });
     }
 
     yield* providerService
@@ -1002,6 +1070,25 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const processSessionStartRequested = Effect.fn("processSessionStartRequested")(function* (
+    event: Extract<ProviderIntentEvent, { type: "thread.session-start-requested" }>,
+  ) {
+    const thread = yield* resolveThread(event.payload.threadId);
+    if (!thread || (thread.session && thread.session.status !== "stopped")) {
+      return;
+    }
+    yield* ensureSessionForThread(event.payload.threadId, event.payload.createdAt).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("provider command reactor failed to prewarm provider session", {
+          eventType: event.type,
+          threadId: event.payload.threadId,
+          cause: Cause.pretty(cause),
+        }),
+      ),
+      Effect.forkScoped,
+    );
+  });
+
   const processDomainEvent = Effect.fn("processDomainEvent")(function* (
     event: ProviderIntentEvent,
   ) {
@@ -1039,6 +1126,9 @@ const make = Effect.gen(function* () {
       case "thread.user-input-response-requested":
         yield* processUserInputResponseRequested(event);
         return;
+      case "thread.session-start-requested":
+        yield* processSessionStartRequested(event);
+        return;
       case "thread.session-stop-requested":
         yield* processSessionStopRequested(event);
         return;
@@ -1068,6 +1158,7 @@ const make = Effect.gen(function* () {
         event.type === "thread.turn-interrupt-requested" ||
         event.type === "thread.approval-response-requested" ||
         event.type === "thread.user-input-response-requested" ||
+        event.type === "thread.session-start-requested" ||
         event.type === "thread.session-stop-requested"
       ) {
         return yield* worker.enqueue(event);
