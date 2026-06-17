@@ -222,6 +222,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        goal: null,
         session: {
           threadId: THREAD_ID,
           status: "ready",
@@ -269,6 +270,7 @@ function toShellSnapshot(snapshot: OrchestrationReadModel) {
       hasPendingApprovals: false,
       hasPendingUserInput: false,
       hasActionableProposedPlan: false,
+      goal: thread.goal,
     })),
     updatedAt: snapshot.updatedAt,
   };

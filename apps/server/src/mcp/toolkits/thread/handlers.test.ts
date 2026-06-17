@@ -49,6 +49,7 @@ const sourceThread: OrchestrationThreadShell = {
   hasPendingApprovals: false,
   hasPendingUserInput: false,
   hasActionableProposedPlan: false,
+  goal: null,
 };
 const project: OrchestrationProjectShell = {
   id: projectId,

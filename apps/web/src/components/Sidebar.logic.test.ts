@@ -499,6 +499,7 @@ describe("resolveThreadStatusPill", () => {
     interactionMode: "plan" as const,
     latestTurn: null,
     lastVisitedAt: undefined,
+    goal: null,
     session: {
       provider: ProviderDriverKind.make("codex"),
       status: "running" as const,
@@ -761,6 +762,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     worktreePath: null,
     turnDiffSummaries: [],
     activities: [],
+    goal: null,
     ...overrides,
   };
 }

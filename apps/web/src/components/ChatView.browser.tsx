@@ -447,6 +447,7 @@ function createSnapshotForTargetUser(options: {
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        goal: null,
         session: {
           threadId: THREAD_ID,
           status: options.sessionStatus ?? "ready",
@@ -513,6 +514,7 @@ function addThreadToSnapshot(
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        goal: null,
         session: {
           threadId,
           status: "ready",
@@ -547,6 +549,7 @@ function toShellThread(thread: OrchestrationReadModel["threads"][number]) {
     hasPendingApprovals: false,
     hasPendingUserInput: false,
     hasActionableProposedPlan: false,
+    goal: thread.goal,
   };
 }
 
@@ -875,6 +878,7 @@ function createSnapshotWithSecondaryProject(options?: {
           activities: [],
           proposedPlans: [],
           checkpoints: [],
+          goal: null,
           session: {
             threadId: "thread-secondary-project" as ThreadId,
             status: "ready",
@@ -907,6 +911,7 @@ function createSnapshotWithSecondaryProject(options?: {
           activities: [],
           proposedPlans: [],
           checkpoints: [],
+          goal: null,
           session: {
             threadId: ARCHIVED_SECONDARY_THREAD_ID,
             status: "ready",
@@ -7259,6 +7264,85 @@ describe("ChatView timeline estimator parity (full app)", () => {
         expect(searchInput).not.toBeNull();
         expect(document.activeElement).toBe(searchInput);
       });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("strips /goal into a non-overflow composer indicator and dispatches a goal request", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-goal-command-target" as MessageId,
+        targetText: "goal command thread",
+      }),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return {
+            sequence: fixture.snapshot.snapshotSequence + 1,
+          };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      await waitForComposerEditor();
+      await page.getByTestId("composer-editor").fill("/goal ship compact goal mode");
+
+      await vi.waitFor(
+        () => {
+          const indicator = document.querySelector<HTMLElement>(
+            '[data-chat-composer-goal-indicator="true"]',
+          );
+          const overflowMenu = document.querySelector<HTMLElement>(
+            '[aria-label="Composer controls"]',
+          );
+          const editor = document.querySelector<HTMLElement>('[data-testid="composer-editor"]');
+
+          expect(indicator).not.toBeNull();
+          expect(indicator?.textContent).toContain("Goal");
+          expect(editor?.textContent).toContain("ship compact goal mode");
+          expect(editor?.textContent).not.toContain("/goal");
+          expect(!overflowMenu || !overflowMenu.contains(indicator)).toBe(true);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      document
+        .querySelector<HTMLButtonElement>('[data-chat-composer-goal-indicator="true"]')
+        ?.click();
+      await vi.waitFor(() => {
+        expect(document.querySelector('[data-chat-composer-goal-indicator="true"]')).toBeNull();
+      });
+
+      await page.getByTestId("composer-editor").fill("/goal ship compact goal mode");
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(
+        () => {
+          const goalRequest = wsRequests.find(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "thread.goal.request",
+          ) as
+            | {
+                request?: { kind?: string; objective?: string };
+                type?: string;
+              }
+            | undefined;
+          expect(goalRequest).toMatchObject({
+            type: "thread.goal.request",
+            request: {
+              kind: "set",
+              objective: "ship compact goal mode",
+            },
+          });
+        },
+        { timeout: 8_000, interval: 16 },
+      );
     } finally {
       await mounted.cleanup();
     }

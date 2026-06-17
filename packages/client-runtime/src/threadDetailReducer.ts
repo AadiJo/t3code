@@ -97,6 +97,7 @@ export function applyThreadDetailEvent(
           activities: [],
           checkpoints: [],
           session: null,
+          goal: null,
         },
       };
 
@@ -342,6 +343,26 @@ export function applyThreadDetailEvent(
         },
       };
     }
+
+    case "thread.goal-updated":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          goal: event.payload.goal,
+          updatedAt: event.occurredAt,
+        },
+      };
+
+    case "thread.goal-cleared":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          goal: null,
+          updatedAt: event.occurredAt,
+        },
+      };
 
     case "thread.session-stop-requested":
       return thread.session === null

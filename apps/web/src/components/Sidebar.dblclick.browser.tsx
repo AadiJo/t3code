@@ -58,6 +58,7 @@ function buildThread(title: string): SidebarThreadSummary {
     hasPendingApprovals: false,
     hasPendingUserInput: false,
     hasActionableProposedPlan: false,
+    goal: null,
   };
 }
 

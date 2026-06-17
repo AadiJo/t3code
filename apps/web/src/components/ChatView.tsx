@@ -44,7 +44,9 @@ import { readLocalApi } from "../localApi";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import {
   collapseExpandedComposerCursor,
+  parseComposerGoalSlashCommand,
   parseStandaloneComposerSlashCommand,
+  validateComposerGoalSlashCommand,
 } from "../composer-logic";
 import {
   derivePendingApprovals,
@@ -1893,7 +1895,12 @@ function ChatViewContent(props: ChatViewProps) {
     () => deriveActivePlanState(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
   );
-  const planSidebarLabel = sidebarProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
+  const planSidebarLabel =
+    sidebarProposedPlan || interactionMode === "plan"
+      ? "Plan"
+      : activeThread?.goal
+        ? "Goal"
+        : "Tasks";
   const showPlanFollowUpPrompt =
     pendingUserInputs.length === 0 &&
     interactionMode === "plan" &&
@@ -3801,6 +3808,7 @@ function ChatViewContent(props: ChatViewProps) {
       selectedProviderModels: ctxSelectedProviderModels,
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
+      goalMode: composerGoalMode,
     } = sendCtx;
     const promptForSend = promptRef.current;
     const {
@@ -3844,6 +3852,131 @@ function ChatViewContent(props: ChatViewProps) {
       promptRef.current = "";
       clearComposerDraftContent(composerDraftTarget);
       composerRef.current?.resetCursorState();
+      return;
+    }
+    if (
+      composerGoalMode &&
+      (composerImages.length > 0 ||
+        sendableComposerTerminalContexts.length > 0 ||
+        composerElementContexts.length > 0 ||
+        composerPreviewAnnotations.length > 0 ||
+        composerReviewComments.length > 0)
+    ) {
+      setThreadError(activeThread.id, "Remove attachments and context before sending a goal.");
+      return;
+    }
+    const goalCommandText = composerGoalMode
+      ? trimmed.length > 0
+        ? `/goal ${trimmed}`
+        : "/goal"
+      : trimmed;
+    const goalSlashCommand =
+      (composerGoalMode || trimmed.toLowerCase().startsWith("/goal")) &&
+      ctxSelectedProvider === "codex" &&
+      composerImages.length === 0 &&
+      sendableComposerTerminalContexts.length === 0 &&
+      composerElementContexts.length === 0 &&
+      composerPreviewAnnotations.length === 0 &&
+      composerReviewComments.length === 0
+        ? parseComposerGoalSlashCommand(goalCommandText)
+        : null;
+    if (goalSlashCommand) {
+      const goalValidationError = validateComposerGoalSlashCommand(goalCommandText);
+      if (goalValidationError) {
+        setThreadError(activeThread.id, goalValidationError);
+        return;
+      }
+      if (!activeProject) {
+        return;
+      }
+      if (!isServerThread && goalSlashCommand.kind !== "set") {
+        setThreadError(activeThread.id, "Enter a goal objective to start a thread with /goal.");
+        return;
+      }
+      sendInFlightRef.current = true;
+      beginLocalDispatch({ preparingWorktree: false });
+      setThreadError(activeThread.id, null);
+      promptRef.current = "";
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+      const createdAt = new Date().toISOString();
+      const title =
+        goalSlashCommand.kind === "set" ? truncate(goalSlashCommand.objective) : activeThread.title;
+      const threadCreateModelSelection = createModelSelection(
+        ctxSelectedModelSelection.instanceId,
+        ctxSelectedModel || activeProject.defaultModelSelection?.model || DEFAULT_MODEL,
+        ctxSelectedModelSelection.options,
+      );
+      await (async () => {
+        if (!isServerThread) {
+          await api.orchestration.dispatchCommand({
+            type: "thread.create",
+            commandId: newCommandId(),
+            threadId: activeThread.id,
+            projectId: activeProject.id,
+            title,
+            modelSelection: threadCreateModelSelection,
+            runtimeMode,
+            interactionMode,
+            branch: activeThreadBranch,
+            worktreePath: activeThread.worktreePath,
+            createdAt: activeThread.createdAt,
+          });
+        } else {
+          if (activeThread.messages.length === 0 && goalSlashCommand.kind === "set") {
+            await api.orchestration.dispatchCommand({
+              type: "thread.meta.update",
+              commandId: newCommandId(),
+              threadId: activeThread.id,
+              title,
+            });
+          }
+          await persistThreadSettingsForNextTurn({
+            environmentId: activeThread.environmentId,
+            threadId: activeThread.id,
+            createdAt,
+            ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
+            runtimeMode,
+            interactionMode,
+          });
+        }
+
+        await api.orchestration.dispatchCommand({
+          type: "thread.goal.request",
+          commandId: newCommandId(),
+          threadId: activeThread.id,
+          request: goalSlashCommand,
+          createdAt,
+        });
+
+        if (!isServerThread) {
+          await waitForStartedServerThread(
+            scopeThreadRef(activeThread.environmentId, activeThread.id),
+          );
+          await navigate({
+            to: "/$environmentId/$threadId",
+            params: {
+              environmentId: activeThread.environmentId,
+              threadId: activeThread.id,
+            },
+          });
+        }
+      })().catch((err: unknown) => {
+        promptRef.current = promptForSend;
+        setComposerDraftPrompt(composerDraftTarget, promptForSend);
+        composerRef.current?.resetCursorState({
+          cursor: collapseExpandedComposerCursor(promptForSend, promptForSend.length),
+          prompt: promptForSend,
+          detectTrigger: true,
+          goalMode: composerGoalMode,
+        });
+        setThreadError(
+          activeThread.id,
+          err instanceof Error ? err.message : "Failed to send goal command.",
+        );
+      });
+      sendInFlightRef.current = false;
+      resetLocalDispatch();
       return;
     }
     if (!hasSendableContent) {
@@ -4109,6 +4242,57 @@ function ChatViewContent(props: ChatViewProps) {
       resetLocalDispatch();
     }
   };
+
+  const onSubmitGoalCommand = useCallback(
+    async (commandText: "/goal pause" | "/goal resume" | "/goal clear") => {
+      const api = readEnvironmentApi(environmentId);
+      if (
+        !api ||
+        !activeThread ||
+        isSendBusy ||
+        isConnecting ||
+        activeEnvironmentUnavailable ||
+        sendInFlightRef.current
+      ) {
+        return;
+      }
+      const goalSlashCommand = parseComposerGoalSlashCommand(commandText);
+      if (!goalSlashCommand) return;
+      const messageCreatedAt = new Date().toISOString();
+
+      sendInFlightRef.current = true;
+      beginLocalDispatch({ preparingWorktree: false });
+      setThreadError(activeThread.id, null);
+
+      await api.orchestration
+        .dispatchCommand({
+          type: "thread.goal.request",
+          commandId: newCommandId(),
+          threadId: activeThread.id,
+          request: goalSlashCommand,
+          createdAt: messageCreatedAt,
+        })
+        .catch((err: unknown) => {
+          setThreadError(
+            activeThread.id,
+            err instanceof Error ? err.message : "Failed to send goal command.",
+          );
+        });
+
+      sendInFlightRef.current = false;
+      resetLocalDispatch();
+    },
+    [
+      activeEnvironmentUnavailable,
+      activeThread,
+      beginLocalDispatch,
+      environmentId,
+      isConnecting,
+      isSendBusy,
+      resetLocalDispatch,
+      setThreadError,
+    ],
+  );
 
   const onInterrupt = async () => {
     const api = activeThread ? readEnvironmentApi(activeThread.environmentId) : undefined;
@@ -4791,6 +4975,9 @@ function ChatViewContent(props: ChatViewProps) {
       <PlanSidebar
         activePlan={activePlan}
         activeProposedPlan={sidebarProposedPlan}
+        activeGoal={activeThread.goal}
+        goalCommandDisabled={isSendBusy || isConnecting || Boolean(activeEnvironmentUnavailable)}
+        onSubmitGoalCommand={onSubmitGoalCommand}
         label={planSidebarLabel}
         environmentId={environmentId}
         threadRef={activeThreadRef}
@@ -4971,6 +5158,7 @@ function ChatViewContent(props: ChatViewProps) {
                     activeProposedPlan={activeProposedPlan}
                     activePlan={activePlan as { turnId?: TurnId } | null}
                     sidebarProposedPlan={sidebarProposedPlan as { turnId?: TurnId } | null}
+                    activeGoal={activeThread.goal !== null}
                     planSidebarLabel={planSidebarLabel}
                     planSidebarOpen={planSidebarOpen}
                     runtimeMode={runtimeMode}
