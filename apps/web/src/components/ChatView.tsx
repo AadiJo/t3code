@@ -41,6 +41,7 @@ import { resolveAssetUrl } from "../assets/assetUrls";
 import { isElectron } from "../env";
 import { PreviewAutomationOwner } from "./preview/PreviewAutomationOwner";
 import { readLocalApi } from "../localApi";
+import { activatePrewarmedDraftThreadSession } from "../draftThreadPrewarm";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
 import {
   collapseExpandedComposerCursor,
@@ -3996,6 +3997,13 @@ function ChatViewContent(props: ChatViewProps) {
       return;
     }
     if (!activeProject) return;
+    let draftThreadForSend = draftThread;
+    if (isLocalDraftThread && draftThread?.envMode === "local") {
+      await activatePrewarmedDraftThreadSession(draftThread, { waitForPending: true });
+      draftThreadForSend = draftId
+        ? (useComposerDraftStore.getState().getDraftSession(draftId) ?? draftThread)
+        : draftThread;
+    }
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
     const baseBranchForWorktree =
@@ -4146,7 +4154,7 @@ function ChatViewContent(props: ChatViewProps) {
       }
 
       const turnAttachments = await turnAttachmentsPromise;
-      const shouldBootstrapCreateThread = isLocalDraftThread && !draftThread?.promotedTo;
+      const shouldBootstrapCreateThread = isLocalDraftThread && !draftThreadForSend?.promotedTo;
       const bootstrap =
         shouldBootstrapCreateThread || baseBranchForWorktree
           ? {

@@ -3544,9 +3544,18 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const draftId = DraftId.make("draft-wsl-send");
     const wslThreadId = "thread-wsl-send" as ThreadId;
     const wslProjectRef = scopeProjectRef(WSL_ENVIRONMENT_ID, PROJECT_ID);
-    const wslDispatchMock = vi.fn(async () => ({
-      sequence: fixture.snapshot.snapshotSequence + 1,
-    }));
+    let releasePrewarmCreate: () => void = () => {};
+    const prewarmCreateRelease = new Promise<void>((resolve) => {
+      releasePrewarmCreate = resolve;
+    });
+    const wslDispatchMock = vi.fn(async (command: { type?: string }) => {
+      if (command.type === "thread.create") {
+        await prewarmCreateRelease;
+      }
+      return {
+        sequence: fixture.snapshot.snapshotSequence + 1,
+      };
+    });
 
     useComposerDraftStore.getState().setProjectDraftThreadId(wslProjectRef, draftId, {
       threadId: wslThreadId,
@@ -3577,24 +3586,44 @@ describe("ChatView timeline estimator parity (full app)", () => {
         .getState()
         .syncServerShellSnapshot(toShellSnapshot(createDraftOnlySnapshot()), WSL_ENVIRONMENT_ID);
       await waitForLayout();
-
-      const sendButton = await waitForSendButton();
-      expect(sendButton.disabled).toBe(false);
-      sendButton.click();
-
       await vi.waitFor(
         () => {
           expect(wslDispatchMock).toHaveBeenCalledWith(
             expect.objectContaining({
-              type: "thread.turn.start",
+              type: "thread.create",
               threadId: wslThreadId,
-              bootstrap: expect.objectContaining({
-                createThread: expect.objectContaining({
-                  projectId: PROJECT_ID,
-                }),
-              }),
             }),
           );
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+      releasePrewarmCreate();
+
+      await vi.waitFor(
+        () => {
+          const turnStartCall = wslDispatchMock.mock.calls.find(
+            ([command]) => command.type === "thread.turn.start",
+          );
+          const turnStartCommand = turnStartCall?.[0] as
+            | {
+                bootstrap?: unknown;
+                message?: { text?: string };
+                threadId?: ThreadId;
+                type?: string;
+              }
+            | undefined;
+          expect(turnStartCommand).toMatchObject({
+            type: "thread.turn.start",
+            threadId: wslThreadId,
+            message: expect.objectContaining({
+              text: "Explore this project",
+            }),
+          });
+          expect(turnStartCommand?.bootstrap).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -7298,13 +7327,20 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const overflowMenu = document.querySelector<HTMLElement>(
             '[aria-label="Composer controls"]',
           );
+          const footerControls = document.querySelector<HTMLElement>(
+            '[data-chat-composer-footer-controls="true"]',
+          );
           const editor = document.querySelector<HTMLElement>('[data-testid="composer-editor"]');
 
           expect(indicator).not.toBeNull();
+          expect(footerControls).not.toBeNull();
           expect(indicator?.textContent).toContain("Goal");
           expect(editor?.textContent).toContain("ship compact goal mode");
           expect(editor?.textContent).not.toContain("/goal");
           expect(!overflowMenu || !overflowMenu.contains(indicator)).toBe(true);
+          expect(
+            footerControls!.compareDocumentPosition(indicator!) & Node.DOCUMENT_POSITION_FOLLOWING,
+          ).not.toBe(0);
         },
         { timeout: 8_000, interval: 16 },
       );

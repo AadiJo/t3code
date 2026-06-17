@@ -2580,24 +2580,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 showMobilePendingAnswerActions && "hidden sm:flex",
               )}
             >
-              {composerGoalMode ? (
-                <button
-                  type="button"
-                  data-chat-composer-goal-indicator="true"
-                  className="group/goal inline-flex h-7 max-w-28 shrink-0 items-center gap-1.5 rounded-full border border-blue-400/20 bg-blue-500/12 px-2 text-xs font-medium text-blue-300 transition-colors hover:border-blue-300/35 hover:bg-blue-500/18 hover:text-blue-100"
-                  onPointerDown={(event) => event.preventDefault()}
-                  onClick={disableComposerGoalMode}
-                  title="Disable goal mode"
-                  aria-label="Disable goal mode"
-                >
-                  <span className="relative size-3.5 shrink-0">
-                    <TargetIcon className="absolute inset-0 size-3.5 transition-opacity group-hover/goal:opacity-0" />
-                    <XIcon className="absolute inset-0 size-3.5 opacity-0 transition-opacity group-hover/goal:opacity-100" />
-                  </span>
-                  <span className="hidden min-[420px]:inline min-w-0 truncate">Goal</span>
-                </button>
-              ) : null}
-              <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div
+                data-chat-composer-footer-controls="true"
+                className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
                 <ProviderModelPicker
                   compact={isComposerFooterCompact}
                   activeInstanceId={selectedInstanceId}
@@ -2656,6 +2642,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   </>
                 )}
               </div>
+
+              {composerGoalMode ? (
+                <button
+                  type="button"
+                  data-chat-composer-goal-indicator="true"
+                  className="group/goal inline-flex h-7 min-w-7 max-w-28 shrink-0 items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full border border-blue-400/20 bg-blue-500/12 px-2 text-xs font-medium text-blue-300 transition-colors hover:border-blue-300/35 hover:bg-blue-500/18 hover:text-blue-100"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={disableComposerGoalMode}
+                  title="Disable goal mode"
+                  aria-label="Disable goal mode"
+                >
+                  <span className="relative size-3.5 shrink-0">
+                    <TargetIcon className="absolute inset-0 size-3.5 transition-opacity group-hover/goal:opacity-0" />
+                    <XIcon className="absolute inset-0 size-3.5 opacity-0 transition-opacity group-hover/goal:opacity-100" />
+                  </span>
+                  <span className="hidden min-w-0 truncate min-[520px]:inline">Goal</span>
+                </button>
+              ) : null}
 
               {/* Right side: send / stop button */}
               <div
