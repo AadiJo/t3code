@@ -253,10 +253,12 @@ describe("DesktopBackendConfiguration", () => {
       const previousWslEnv = process.env.WSLENV;
       const previousOpenAiKey = process.env.OPENAI_API_KEY;
       const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
+      const previousCodexHome = process.env.CODEX_HOME;
       try {
         process.env.WSLENV = "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u";
         process.env.OPENAI_API_KEY = "openai-key";
         process.env.ANTHROPIC_API_KEY = "anthropic-key";
+        process.env.CODEX_HOME = "C:\\Users\\test\\.codex";
 
         yield* Effect.gen(function* () {
           const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
@@ -274,13 +276,18 @@ describe("DesktopBackendConfiguration", () => {
           assert.equal(config.httpBaseUrl.href, "http://172.27.0.99:5050/");
           assert.equal(config.env.OPENAI_API_KEY, "openai-key");
           assert.equal(config.env.ANTHROPIC_API_KEY, "anthropic-key");
+          assert.equal(
+            config.env.T3CODE_CODEX_SKILL_EXTRA_ROOTS,
+            '["/mnt/c/Users/test/.codex/skills"]',
+          );
           // The existing WSLENV is preserved byte-for-byte (note the empty
           // "::" segment survives — WSL ignores it, so we don't normalize
-          // it away) and ANTHROPIC_API_KEY is appended. OPENAI_API_KEY is
-          // already declared, so it isn't forwarded twice.
+          // it away), ANTHROPIC_API_KEY and the host Codex skill root are
+          // appended. OPENAI_API_KEY is already declared, so it isn't forwarded
+          // twice.
           assert.equal(
             config.env.WSLENV,
-            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:ANTHROPIC_API_KEY",
+            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:ANTHROPIC_API_KEY:T3CODE_CODEX_SKILL_EXTRA_ROOTS",
           );
         }).pipe(
           Effect.provide(
@@ -290,7 +297,10 @@ describe("DesktopBackendConfiguration", () => {
               Layer.provideMerge(
                 DesktopWslEnvironment.layerTest({
                   isAvailable: true,
-                  windowsToWslPath: () => Option.some("/mnt/c/repo/apps/server/src/index.ts"),
+                  windowsToWslPath: (_distro, windowsPath) =>
+                    windowsPath.includes(".codex")
+                      ? Option.some("/mnt/c/Users/test/.codex/skills")
+                      : Option.some("/mnt/c/repo/apps/server/src/index.ts"),
                   getDistroIp: () => Option.some("172.27.0.99"),
                 }),
               ),
@@ -302,6 +312,7 @@ describe("DesktopBackendConfiguration", () => {
         restoreEnv("WSLENV", previousWslEnv);
         restoreEnv("OPENAI_API_KEY", previousOpenAiKey);
         restoreEnv("ANTHROPIC_API_KEY", previousAnthropicKey);
+        restoreEnv("CODEX_HOME", previousCodexHome);
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

@@ -32,7 +32,7 @@ interface ChatHeaderProps {
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
-  rightPanelOpen: boolean;
+  panelControlsInset: "none" | "compact" | "expanded";
 }
 
 export function shouldShowOpenInPicker(input: {
@@ -63,7 +63,7 @@ export const ChatHeader = memo(function ChatHeader({
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
-  rightPanelOpen,
+  panelControlsInset,
 }: ChatHeaderProps) {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const showOpenInPicker = shouldShowOpenInPicker({
@@ -92,8 +92,12 @@ export const ChatHeader = memo(function ChatHeader({
       <div
         data-chat-header-actions
         className={cn(
-          "flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3",
-          rightPanelOpen ? "pr-0" : "pr-16",
+          "flex shrink-0 items-center justify-end gap-2 transition-[padding] [transition-duration:var(--motion-duration-panel)] ease-[var(--motion-ease-out)] @3xl/header-actions:gap-3",
+          panelControlsInset === "expanded"
+            ? "pr-[calc(var(--workspace-controls-right)+6rem)]"
+            : panelControlsInset === "compact"
+              ? "pr-[calc(var(--workspace-controls-right)+2.75rem)]"
+              : "pr-0",
         )}
       >
         {activeProjectScripts && (

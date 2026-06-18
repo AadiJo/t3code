@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import serverPackageJson from "../../../server/package.json" with { type: "json" };
@@ -78,6 +79,9 @@ const DESKTOP_BACKEND_ENV_NAMES = [
 // handled separately via a `--dev-url` CLI flag because WSLENV translation of
 // URL-shaped values (colons / slashes) is unreliable.
 const WSL_FORWARDED_ENV_NAMES = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
+const T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV = "T3CODE_CODEX_SKILL_EXTRA_ROOTS";
+const CodexSkillExtraRootsEnvSchema = Schema.fromJsonString(Schema.Array(Schema.String));
+const encodeCodexSkillExtraRootsEnv = Schema.encodeSync(CodexSkillExtraRootsEnvSchema);
 
 const backendChildEnvPatch = (): Record<string, string | undefined> =>
   Object.fromEntries(DESKTOP_BACKEND_ENV_NAMES.map((name) => [name, undefined]));
@@ -112,6 +116,24 @@ const mergeWslEnv = (
   const parts = [existing, ...additions].filter((part) => part.length > 0);
   return parts.length > 0 ? parts.join(":") : undefined;
 };
+
+function resolveWindowsCodexHome(environment: DesktopEnvironment.DesktopEnvironmentShape): string {
+  const configuredHome = process.env.CODEX_HOME?.trim();
+  if (!configuredHome) {
+    return environment.path.join(environment.homeDirectory, ".codex");
+  }
+  if (configuredHome === "~") {
+    return environment.homeDirectory;
+  }
+  if (configuredHome.startsWith("~/") || configuredHome.startsWith("~\\")) {
+    return environment.path.join(environment.homeDirectory, configuredHome.slice(2));
+  }
+  return environment.path.resolve(configuredHome);
+}
+
+const resolveWindowsCodexSkillsPath = (
+  environment: DesktopEnvironment.DesktopEnvironmentShape,
+): string => environment.path.join(resolveWindowsCodexHome(environment), "skills");
 
 const { logWarning: logBackendConfigurationWarning } = DesktopObservability.makeComponentLogger(
   "desktop-backend-configuration",
@@ -411,6 +433,17 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
       forwardedEnv[name] = value;
       forwardedEnvNames.push(name);
     }
+  }
+  const windowsCodexSkillsPath = resolveWindowsCodexSkillsPath(environment);
+  const linuxCodexSkillsPath = yield* wslEnvironment.windowsToWslPath(
+    input.distro,
+    windowsCodexSkillsPath,
+  );
+  if (Option.isSome(linuxCodexSkillsPath)) {
+    forwardedEnv[T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV] = encodeCodexSkillExtraRootsEnv([
+      linuxCodexSkillsPath.value,
+    ]);
+    forwardedEnvNames.push(T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV);
   }
 
   // Build an explicit copy of process.env minus T3CODE_HOME (dev-runner

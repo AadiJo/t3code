@@ -1,4 +1,10 @@
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { isElectron } from "~/env";
 import { useResizableWidth } from "~/hooks/useResizableWidth";
@@ -24,12 +30,25 @@ const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
 export function PreviewPanelShell(props: {
   mode: PreviewPanelMode;
   maximized?: boolean;
+  open?: boolean;
   children: ReactNode;
 }) {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
   const isInline = props.mode === "inline";
+  const isOpen = props.open ?? true;
+  const isMaximized = Boolean(props.maximized);
+  const shellRef = useRef<HTMLDivElement>(null);
   const viewportWidth = useViewportWidth();
   const maxWidth = getViewportClampedMaxWidth(viewportWidth);
+
+  const disableTransitions = useCallback(() => {
+    shellRef.current?.style.setProperty("transition-duration", "0ms");
+  }, []);
+
+  const restoreTransitions = useCallback(() => {
+    shellRef.current?.style.removeProperty("transition-duration");
+  }, []);
+
   const { width, handlers } = useResizableWidth({
     storageKey: PREVIEW_PANEL_WIDTH_STORAGE_KEY,
     defaultWidth: PREVIEW_PANEL_DEFAULT_WIDTH,
@@ -37,25 +56,50 @@ export function PreviewPanelShell(props: {
     maxWidth,
     resizeBasis: viewportWidth,
     edge: "left",
+    onDragStart: disableTransitions,
+    onDragEnd: restoreTransitions,
   });
+
+  const inlineStyle = isInline
+    ? isMaximized
+      ? { flex: isOpen ? "1 1 0%" : "0 0 0px", minWidth: 0 }
+      : { flex: isOpen ? `0 0 ${width}px` : "0 0 0px", minWidth: 0 }
+    : undefined;
+
+  const panelBody = (
+    <>
+      {useDragRegion ? <div className="electron-drag-region h-0 w-full" aria-hidden /> : null}
+      {props.children}
+    </>
+  );
 
   return (
     <div
+      ref={shellRef}
       className={cn(
         "relative flex h-full min-h-0 min-w-0 flex-col self-stretch bg-background",
-        isInline
-          ? props.maximized
-            ? "flex-1 border-l border-border"
-            : "shrink-0 border-l border-border"
-          : "w-full",
+        isInline && "right-panel-motion border-l border-border",
+        isInline && isMaximized ? "min-w-0 flex-1" : isInline ? "shrink-0" : "w-full",
       )}
-      style={isInline && !props.maximized ? { width: `${width}px` } : undefined}
+      data-panel-open={isOpen ? "true" : "false"}
+      data-preview-panel-maximized={isMaximized ? "true" : "false"}
+      style={inlineStyle}
       data-preview-panel-mode={props.mode}
-      data-preview-panel-maximized={props.maximized ? "true" : "false"}
     >
-      {isInline && !props.maximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
-      {useDragRegion ? <div className="electron-drag-region h-0 w-full" aria-hidden /> : null}
-      {props.children}
+      {isInline && !isMaximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
+      {isInline ? (
+        <div
+          className="flex h-full min-w-0 flex-col"
+          style={{
+            width: isMaximized ? "100%" : width,
+            minWidth: isMaximized ? 0 : width,
+          }}
+        >
+          {panelBody}
+        </div>
+      ) : (
+        panelBody
+      )}
     </div>
   );
 }

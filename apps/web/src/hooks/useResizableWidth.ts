@@ -25,6 +25,8 @@ export interface UseResizableWidthOptions {
    *   - "right" → panel grows rightward (left-anchored panels)
    */
   readonly edge: "left" | "right";
+  readonly onDragStart?: () => void;
+  readonly onDragEnd?: () => void;
 }
 
 export interface ResizableWidthHandlers {
@@ -47,7 +49,8 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, resizeBasis, edge } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, resizeBasis, edge, onDragStart, onDragEnd } =
+    options;
 
   const clamp = useCallback(
     (value: number): number => {
@@ -119,8 +122,9 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     }
     document.body.style.removeProperty("cursor");
     document.body.style.removeProperty("user-select");
+    onDragEnd?.();
     dragStateRef.current = null;
-  }, []);
+  }, [onDragEnd]);
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -135,6 +139,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
       }
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
+      onDragStart?.();
       dragStateRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -144,7 +149,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
         target,
       };
     },
-    [width],
+    [onDragStart, width],
   );
 
   const onPointerMove = useCallback(

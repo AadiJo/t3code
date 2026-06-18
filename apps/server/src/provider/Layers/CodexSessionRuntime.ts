@@ -38,7 +38,12 @@ import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
-import { buildCodexInitializeParams } from "./CodexProvider.ts";
+import {
+  buildCodexInitializeParams,
+  configureCodexSkillExtraRoots,
+  resolveCodexSkillExtraRoots,
+  T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV,
+} from "./CodexProvider.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
@@ -743,7 +748,7 @@ export const makeCodexSessionRuntime = (
     // `child_process.spawn`; `expandHomePath` lets a configured
     // `CODEX_HOME=~/.codex_work` reach codex as an absolute path.
     const resolvedHomePath = options.homePath ? expandHomePath(options.homePath) : undefined;
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...options.environment,
       ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
     };
@@ -1227,6 +1232,10 @@ export const makeCodexSessionRuntime = (
       yield* emitSessionEvent("session/connecting", "Starting Codex App Server session.");
       yield* client.request("initialize", buildCodexInitializeParams());
       yield* client.notify("initialized", undefined);
+      yield* configureCodexSkillExtraRoots(
+        client,
+        resolveCodexSkillExtraRoots(resolvedHomePath, env[T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV]),
+      );
 
       const requestedModel = normalizeCodexModelSlug(options.model);
 

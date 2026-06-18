@@ -35,6 +35,9 @@ import packageJson from "../../../package.json" with { type: "json" };
 const isCodexAppServerSpawnError = Schema.is(CodexErrors.CodexAppServerSpawnError);
 
 const CODEX_APP_SERVER_PROBE_FORCE_KILL_AFTER = "2 seconds" as const;
+export const T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV = "T3CODE_CODEX_SKILL_EXTRA_ROOTS";
+const CodexSkillExtraRootsEnvSchema = Schema.fromJsonString(Schema.Array(Schema.String));
+const decodeCodexSkillExtraRootsEnv = Schema.decodeUnknownOption(CodexSkillExtraRootsEnvSchema);
 
 const CODEX_PRESENTATION = {
   displayName: "Codex",
@@ -252,11 +255,57 @@ function parseCodexSkillsListResponse(
   });
 }
 
-export function resolveCodexSkillExtraRoots(resolvedHomePath: string | undefined): string[] {
+export function parseCodexSkillExtraRootsEnv(value: string | undefined): string[] {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const parsed = decodeCodexSkillExtraRootsEnv(trimmed);
+  if (Option.isSome(parsed)) {
+    return parsed.value.filter((entry) => entry.trim().length > 0);
+  }
+
+  return trimmed
+    .split(/[;\n]/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+export function resolveCodexSkillExtraRoots(
+  resolvedHomePath: string | undefined,
+  extraRootsEnv = process.env[T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV],
+): string[] {
   const codexHome = resolvedHomePath ?? expandHomePath("~/.codex");
   const separator = codexHome.includes("\\") ? "\\" : "/";
-  return [`${codexHome.replace(/[\\/]+$/, "")}${separator}skills`];
+  const roots = [
+    `${codexHome.replace(/[\\/]+$/, "")}${separator}skills`,
+    ...parseCodexSkillExtraRootsEnv(extraRootsEnv),
+  ];
+  return Array.from(new Set(roots));
 }
+
+export const configureCodexSkillExtraRoots = Effect.fn("configureCodexSkillExtraRoots")(function* (
+  client: CodexClient.CodexAppServerClientShape,
+  extraRoots: ReadonlyArray<string>,
+) {
+  if (extraRoots.length === 0) {
+    return;
+  }
+
+  yield* client
+    .request("skills/extraRoots/set", {
+      extraRoots,
+    })
+    .pipe(
+      Effect.catch((error) =>
+        Effect.logDebug("Codex app-server rejected skill extra roots; continuing with defaults", {
+          error: error.message,
+          roots: extraRoots,
+        }),
+      ),
+    );
+});
 
 const requestAllCodexModels = Effect.fn("requestAllCodexModels")(function* (
   client: CodexClient.CodexAppServerClientShape,
@@ -302,7 +351,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   // Expand here for parity with `CodexTextGeneration`/`CodexSessionRuntime`.
   const resolvedHomePath = input.homePath ? expandHomePath(input.homePath) : undefined;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const environment = {
+  const environment: NodeJS.ProcessEnv = {
     ...input.environment,
     ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
   };
@@ -360,19 +409,11 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
-  const skillExtraRoots = resolveCodexSkillExtraRoots(resolvedHomePath);
-  yield* client
-    .request("skills/extraRoots/set", {
-      extraRoots: skillExtraRoots,
-    })
-    .pipe(
-      Effect.catch((error) =>
-        Effect.logDebug("Codex app-server rejected skill extra roots; continuing with defaults", {
-          error: error.message,
-          roots: skillExtraRoots,
-        }),
-      ),
-    );
+  const skillExtraRoots = resolveCodexSkillExtraRoots(
+    resolvedHomePath,
+    environment[T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV],
+  );
+  yield* configureCodexSkillExtraRoots(client, skillExtraRoots);
 
   const [skillsResponse, models] = yield* Effect.all(
     [

@@ -1628,6 +1628,7 @@ const make = Effect.gen(function* () {
                 `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
               ),
               fallbackText: event.payload.detail,
+              messagePhase: event.payload.messagePhase,
             }
           : undefined;
       const proposedPlanCompletion =
@@ -1652,6 +1653,12 @@ const make = Effect.gen(function* () {
           activeAssistantMessageId,
           () => assistantCompletion.messageId,
         );
+        if (assistantCompletion.messagePhase !== undefined) {
+          yield* rememberAssistantMessagePhase(
+            assistantMessageId,
+            assistantCompletion.messagePhase,
+          );
+        }
         const existingAssistantMessage = findMessageById(messages, assistantMessageId);
         const shouldApplyFallbackCompletionText =
           !existingAssistantMessage || existingAssistantMessage.text.length === 0;

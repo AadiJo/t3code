@@ -735,6 +735,7 @@ describe("ProviderRuntimeIngestion", () => {
         itemType: "assistant_message",
         status: "completed",
         detail: "assistant-only final text",
+        messagePhase: "final_answer",
       },
     });
 
@@ -749,6 +750,7 @@ describe("ProviderRuntimeIngestion", () => {
     );
     expect(message?.text).toBe("assistant-only final text");
     expect(message?.streaming).toBe(false);
+    expect(message?.phase).toBe("final_answer");
   });
 
   it("preserves completed tool metadata on projected tool activities", async () => {

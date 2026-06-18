@@ -1,6 +1,10 @@
 import { assert, it } from "@effect/vitest";
 
-import { mapCodexModelCapabilities, resolveCodexSkillExtraRoots } from "./CodexProvider.ts";
+import {
+  mapCodexModelCapabilities,
+  parseCodexSkillExtraRootsEnv,
+  resolveCodexSkillExtraRoots,
+} from "./CodexProvider.ts";
 
 it("maps current Codex model capability fields", () => {
   const capabilities = mapCodexModelCapabilities({
@@ -107,4 +111,15 @@ it("uses the configured Codex home skills directory as an extra skill root", () 
   const roots = resolveCodexSkillExtraRoots("/Users/test/.codex-work");
   assert.strictEqual(roots.length, 1);
   assert.match(roots[0]!, /[\\/]Users[\\/]test[\\/]\.codex-work[\\/]skills$/);
+});
+
+it("adds env-provided Codex skill roots without duplicates", () => {
+  assert.deepStrictEqual(parseCodexSkillExtraRootsEnv('["/mnt/c/Users/test/.codex/skills"]'), [
+    "/mnt/c/Users/test/.codex/skills",
+  ]);
+
+  assert.deepStrictEqual(
+    resolveCodexSkillExtraRoots("/Users/test/.codex", '["/extra/skills","/extra/skills"]'),
+    ["/Users/test/.codex/skills", "/extra/skills"],
+  );
 });
