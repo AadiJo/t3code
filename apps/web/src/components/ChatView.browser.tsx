@@ -3564,7 +3564,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       expect(sendButton.disabled).toBe(false);
       sendButton.click();
 
-      await expect.element(page.getByText("Starting request for", { exact: false })).toBeVisible();
+      await expect.element(page.getByText("Working for", { exact: false })).toBeVisible();
 
       await vi.waitFor(
         () => {
@@ -3606,7 +3606,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
         (path) => path === serverThreadPath(THREAD_ID),
         "Promoted draft should canonicalize after the user message is persisted.",
       );
-      await expect.element(page.getByText("Starting request for", { exact: false })).toBeVisible();
+      await expect.element(page.getByText("Working for", { exact: false })).toBeVisible();
 
       expect(wsRequests.some((request) => request._tag === WS_METHODS.vcsCreateWorktree)).toBe(
         false,

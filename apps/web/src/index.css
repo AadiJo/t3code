@@ -24,6 +24,7 @@
 
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
+  --animate-working-text-shimmer: working-text-shimmer 1.8s linear infinite;
   --font-sans:
     "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
     sans-serif;
@@ -62,6 +63,11 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   @keyframes skeleton {
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes working-text-shimmer {
     to {
       background-position: -200% 0;
     }
@@ -110,6 +116,19 @@
 
   .surface-subheader {
     @apply flex h-10 min-h-10 shrink-0 items-center border-b border-border/60 bg-background;
+  }
+
+  .working-text-shimmer {
+    @apply inline-block animate-working-text-shimmer bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--muted-foreground) 58%, transparent) 0%,
+      color-mix(in srgb, var(--muted-foreground) 58%, transparent) 36%,
+      var(--foreground) 50%,
+      color-mix(in srgb, var(--muted-foreground) 58%, transparent) 64%,
+      color-mix(in srgb, var(--muted-foreground) 58%, transparent) 100%
+    );
+    background-size: 200% 100%;
   }
 }
 
@@ -708,6 +727,12 @@ label:has(> select#reasoning-effort) select {
   .scroll-to-bottom-control > button,
   .scroll-to-bottom-control[data-state="exiting"] > button {
     animation: none;
+  }
+
+  .working-text-shimmer {
+    animation: none;
+    color: var(--muted-foreground);
+    background-image: none;
   }
 }
 

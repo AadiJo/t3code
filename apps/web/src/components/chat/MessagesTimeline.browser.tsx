@@ -291,7 +291,7 @@ describe("MessagesTimeline", () => {
     );
 
     try {
-      await expect.element(page.getByText("Starting request for", { exact: false })).toBeVisible();
+      await expect.element(page.getByText("Working for", { exact: false })).toBeVisible();
 
       await screen.rerender(
         <MessagesTimeline
