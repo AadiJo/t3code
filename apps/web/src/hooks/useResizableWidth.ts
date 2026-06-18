@@ -17,6 +17,8 @@ export interface UseResizableWidthOptions {
   readonly defaultWidth: number;
   readonly minWidth: number;
   readonly maxWidth: number;
+  /** Optional layout basis used to scale the width when the containing space resizes. */
+  readonly resizeBasis?: number;
   /**
    * Which edge of the host element carries the drag handle:
    *   - "left"  → panel grows leftward (right-anchored panels)
@@ -45,7 +47,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, resizeBasis, edge } = options;
 
   const clamp = useCallback(
     (value: number): number => {
@@ -70,6 +72,28 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   useEffect(() => {
     setWidth((current) => clamp(current));
   }, [clamp]);
+
+  const resizeBasisRef = useRef(resizeBasis);
+  useEffect(() => {
+    if (resizeBasis === undefined) {
+      resizeBasisRef.current = resizeBasis;
+      return;
+    }
+
+    const previousBasis = resizeBasisRef.current;
+    resizeBasisRef.current = resizeBasis;
+
+    if (
+      previousBasis === undefined ||
+      previousBasis <= 0 ||
+      resizeBasis <= 0 ||
+      previousBasis === resizeBasis
+    ) {
+      return;
+    }
+
+    setWidth((current) => clamp((current * resizeBasis) / previousBasis));
+  }, [clamp, resizeBasis]);
 
   const dragStateRef = useRef<{
     pointerId: number;

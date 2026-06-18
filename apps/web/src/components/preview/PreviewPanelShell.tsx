@@ -28,12 +28,14 @@ export function PreviewPanelShell(props: {
 }) {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
   const isInline = props.mode === "inline";
-  const maxWidth = useViewportClampedMaxWidth();
+  const viewportWidth = useViewportWidth();
+  const maxWidth = getViewportClampedMaxWidth(viewportWidth);
   const { width, handlers } = useResizableWidth({
     storageKey: PREVIEW_PANEL_WIDTH_STORAGE_KEY,
     defaultWidth: PREVIEW_PANEL_DEFAULT_WIDTH,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth,
+    resizeBasis: viewportWidth,
     edge: "left",
   });
 
@@ -59,11 +61,10 @@ export function PreviewPanelShell(props: {
 }
 
 /**
- * Track viewport width to derive a sensible upper bound for the panel.
- * Resize-aware so dragging the OS window narrower re-clamps the stored
- * width on the next render (the hook's clamp picks this up automatically).
+ * Track viewport width so the right panel can resize proportionally with the
+ * window while still enforcing a sensible upper bound.
  */
-function useViewportClampedMaxWidth(): number {
+function useViewportWidth(): number {
   const [vw, setVw] = useState(() => (typeof window === "undefined" ? 1280 : window.innerWidth));
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -82,5 +83,12 @@ function useViewportClampedMaxWidth(): number {
       if (frame !== 0) window.cancelAnimationFrame(frame);
     };
   }, []);
-  return Math.min(PREVIEW_PANEL_MAX_WIDTH_PX, Math.floor(vw * PREVIEW_PANEL_MAX_WIDTH_FRACTION));
+  return vw;
+}
+
+function getViewportClampedMaxWidth(viewportWidth: number): number {
+  return Math.min(
+    PREVIEW_PANEL_MAX_WIDTH_PX,
+    Math.floor(viewportWidth * PREVIEW_PANEL_MAX_WIDTH_FRACTION),
+  );
 }
