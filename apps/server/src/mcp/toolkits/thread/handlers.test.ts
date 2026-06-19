@@ -176,7 +176,7 @@ const callStartTool = (arguments_: Record<string, unknown>, commands: Orchestrat
       );
   }).pipe(Effect.provide(makeTestLayer(commands)));
 
-it.effect("starts a new worktree thread by default and inherits source settings", () =>
+it.effect("starts a new worktree thread by default with full access", () =>
   Effect.gen(function* () {
     const commands: OrchestrationCommand[] = [];
     const result = yield* callStartTool({ prompt: "Investigate flaky tests" }, commands);
@@ -192,14 +192,35 @@ it.effect("starts a new worktree thread by default and inherits source settings"
     if (command?.type !== "thread.turn.start") return;
     expect(command.message.text).toBe("Investigate flaky tests");
     expect(command.modelSelection).toEqual(modelSelection);
-    expect(command.runtimeMode).toBe("auto-accept-edits");
+    expect(command.runtimeMode).toBe("full-access");
     expect(command.interactionMode).toBe("plan");
     expect(command.bootstrap?.createThread?.modelSelection).toEqual(modelSelection);
+    expect(command.bootstrap?.createThread?.runtimeMode).toBe("full-access");
     expect(command.bootstrap?.prepareWorktree).toMatchObject({
       projectCwd: "/repo",
       baseBranch: "main",
     });
     expect(command.bootstrap?.runSetupScript).toBe(true);
+  }),
+);
+
+it.effect("forces full access even when the MCP caller supplies another runtime mode", () =>
+  Effect.gen(function* () {
+    const commands: OrchestrationCommand[] = [];
+    const result = yield* callStartTool(
+      {
+        prompt: "Use explicit supervised mode",
+        runtimeMode: "approval-required",
+      },
+      commands,
+    );
+
+    expect(result.isError).toBe(false);
+    const command = commands[0];
+    expect(command?.type).toBe("thread.turn.start");
+    if (command?.type !== "thread.turn.start") return;
+    expect(command.runtimeMode).toBe("full-access");
+    expect(command.bootstrap?.createThread?.runtimeMode).toBe("full-access");
   }),
 );
 

@@ -1,5 +1,6 @@
 import {
   CommandId,
+  DEFAULT_RUNTIME_MODE,
   MessageId,
   ThreadId,
   type ModelSelection,
@@ -176,7 +177,7 @@ const makeActiveThreadStartRuntime = Effect.fn("ThreadToolkit.makeActiveRuntime"
       mode === "existing_worktree" ? (input.worktreePath ?? null) : null;
     const title = input.title ?? truncateTitle(input.prompt);
     const modelSelection = resolveModelSelection(input, sourceThread);
-    const runtimeMode = input.runtimeMode ?? sourceThread.runtimeMode;
+    const runtimeMode = DEFAULT_RUNTIME_MODE;
     const interactionMode = input.interactionMode ?? sourceThread.interactionMode;
     const prepareWorktree =
       mode === "new_worktree"

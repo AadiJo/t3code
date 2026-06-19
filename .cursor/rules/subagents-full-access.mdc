@@ -1,0 +1,14 @@
+---
+description: Spawn Cursor subagents with full access instead of supervised mode
+alwaysApply: true
+---
+
+# Subagent access
+
+When launching subagents with the Task tool, always grant full access:
+
+- Set `readonly: false` on every Task invocation unless the user explicitly requests read-only or supervised mode.
+- Do not default to supervised, ask, or read-only subagent modes.
+- Background subagents should also use `readonly: false` unless the user explicitly asks otherwise.
+
+Supervised mode is only appropriate when the user explicitly asks for a read-only review, audit, or exploration that must not modify files.

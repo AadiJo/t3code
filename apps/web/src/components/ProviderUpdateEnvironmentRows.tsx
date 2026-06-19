@@ -72,13 +72,13 @@ function EnvironmentUpdateRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 py-0.5">
-      <div className="flex min-w-0 flex-col">
+    <span className="flex items-center justify-between gap-3 py-0.5">
+      <span className="flex min-w-0 flex-col">
         <span className="truncate font-medium text-foreground">{group.label}</span>
         <span className={cn("truncate text-xs", rowToneClass(status.kind))}>{status.text}</span>
-      </div>
-      <div className="shrink-0">{trailing}</div>
-    </div>
+      </span>
+      <span className="shrink-0">{trailing}</span>
+    </span>
   );
 }
 
@@ -215,7 +215,7 @@ export function ProviderUpdateEnvironmentRows({
   }
 
   return (
-    <div className="mt-0.5 flex flex-col gap-1">
+    <span className="mt-0.5 flex flex-col gap-1">
       {rows.map(({ group, status }) => (
         <EnvironmentUpdateRow
           key={group.environmentId}
@@ -224,6 +224,6 @@ export function ProviderUpdateEnvironmentRows({
           onUpdate={() => handleUpdate(group.environmentId)}
         />
       ))}
-    </div>
+    </span>
   );
 }

@@ -49,8 +49,16 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, resizeBasis, edge, onDragStart, onDragEnd } =
-    options;
+  const {
+    storageKey,
+    defaultWidth,
+    minWidth,
+    maxWidth,
+    resizeBasis,
+    edge,
+    onDragStart,
+    onDragEnd,
+  } = options;
 
   const clamp = useCallback(
     (value: number): number => {
@@ -107,24 +115,27 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     target: HTMLElement;
   } | null>(null);
 
-  const releasePointer = useCallback((pointerId: number) => {
-    const state = dragStateRef.current;
-    if (!state) return;
-    if (state.rafId !== null) {
-      cancelAnimationFrame(state.rafId);
-    }
-    try {
-      if (state.target.hasPointerCapture(pointerId)) {
-        state.target.releasePointerCapture(pointerId);
+  const releasePointer = useCallback(
+    (pointerId: number) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      if (state.rafId !== null) {
+        cancelAnimationFrame(state.rafId);
       }
-    } catch {
-      // pointer may already be released; harmless.
-    }
-    document.body.style.removeProperty("cursor");
-    document.body.style.removeProperty("user-select");
-    onDragEnd?.();
-    dragStateRef.current = null;
-  }, [onDragEnd]);
+      try {
+        if (state.target.hasPointerCapture(pointerId)) {
+          state.target.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // pointer may already be released; harmless.
+      }
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+      onDragEnd?.();
+      dragStateRef.current = null;
+    },
+    [onDragEnd],
+  );
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
