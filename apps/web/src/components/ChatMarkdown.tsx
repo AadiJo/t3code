@@ -31,6 +31,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import { useChatLayoutMotionActive } from "./chat/chatLayoutMotion";
 import { renderSkillInlineMarkdownChildren } from "./chat/SkillInlineText";
 import { CHAT_FILE_TAG_CHIP_CLASS_NAME, FileTagChipContent } from "./chat/FileTagChip";
 import { PierreEntryIcon } from "./chat/PierreEntryIcon";
@@ -1003,6 +1004,8 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
   threadRef,
   className,
 }: MarkdownFileLinkProps) {
+  const layoutMotionActive = useChatLayoutMotionActive();
+
   const handleOpenInEditor = useCallback(() => {
     const api = readLocalApi();
     if (!api) {
@@ -1126,29 +1129,34 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
     ],
   );
 
+  const chipLink = (
+    <a
+      href={href}
+      className={cn(CHAT_FILE_TAG_CHIP_CLASS_NAME, MARKDOWN_FILE_LINK_CLASS_NAME, className)}
+      data-markdown-file-link="true"
+      data-markdown-copy={copyMarkdown}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (threadRef && isPreviewSupportedInRuntime() && isBrowserPreviewFile(iconPath)) {
+          handleOpenInBrowser();
+          return;
+        }
+        handleOpenInFilePreview();
+      }}
+      onContextMenu={handleContextMenu}
+    >
+      <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
+    </a>
+  );
+
+  if (layoutMotionActive) {
+    return chipLink;
+  }
+
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
-          <a
-            href={href}
-            className={cn(CHAT_FILE_TAG_CHIP_CLASS_NAME, MARKDOWN_FILE_LINK_CLASS_NAME, className)}
-            data-markdown-copy={copyMarkdown}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (threadRef && isPreviewSupportedInRuntime() && isBrowserPreviewFile(iconPath)) {
-                handleOpenInBrowser();
-                return;
-              }
-              handleOpenInFilePreview();
-            }}
-            onContextMenu={handleContextMenu}
-          >
-            <FileTagChipContent path={iconPath} label={label} theme={theme} selectable />
-          </a>
-        }
-      />
+      <TooltipTrigger render={chipLink} />
       <TooltipPopup
         side="top"
         className="max-w-[min(40rem,calc(100vw-2rem))] font-mono text-[11px] leading-tight"
@@ -1192,6 +1200,7 @@ function ChatMarkdown({
   lineBreaks = false,
 }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
+  const layoutMotionActive = useChatLayoutMotionActive();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownFileLinkMetaByHref = useMemo(() => {
     const metaByHref = new Map<
@@ -1300,7 +1309,7 @@ function ChatMarkdown({
               )}
             </MarkdownExternalLink>
           );
-          if (!faviconHost || !href) {
+          if (!faviconHost || !href || layoutMotionActive) {
             return link;
           }
           return (
@@ -1382,6 +1391,7 @@ function ChatMarkdown({
       diffThemeName,
       fileLinkParentSuffixByPath,
       isStreaming,
+      layoutMotionActive,
       markdownFileLinkMetaByHref,
       onTaskListChange,
       threadRef,

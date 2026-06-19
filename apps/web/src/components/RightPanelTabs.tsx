@@ -28,6 +28,7 @@ interface RightPanelTabsProps {
   mode: PreviewPanelMode;
   maximized?: boolean;
   open?: boolean;
+  onLayoutTransitionChange?: (isAnimating: boolean) => void;
   layoutControls?: ReactNode;
   surfaces: readonly RightPanelSurface[];
   activeSurfaceId: string | null;
@@ -342,6 +343,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       mode={props.mode}
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
       {...(props.open !== undefined ? { open: props.open } : {})}
+      {...(props.onLayoutTransitionChange
+        ? { onLayoutTransitionChange: props.onLayoutTransitionChange }
+        : {})}
     >
       <div
         className={cn(

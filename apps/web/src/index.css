@@ -135,12 +135,38 @@
 
   .right-panel-motion {
     @apply overflow-hidden motion-reduce:transition-none;
-    transition: flex-basis var(--motion-duration-panel) var(--motion-ease-out);
-    will-change: flex-basis;
+    flex: 0 0 auto;
+    transition: width var(--motion-duration-panel) var(--motion-ease-out);
+  }
+
+  .right-panel-motion[data-panel-animating="true"] {
+    contain: layout paint;
+    will-change: width;
   }
 
   .right-panel-motion[data-panel-open="false"] {
     @apply pointer-events-none;
+  }
+
+  .right-panel-motion[data-preview-panel-maximized="true"] {
+    transition: flex-basis var(--motion-duration-panel) var(--motion-ease-out);
+  }
+
+  .right-panel-motion[data-preview-panel-maximized="true"][data-panel-animating="true"] {
+    will-change: flex-basis;
+  }
+
+  .chat-column-motion[data-panel-layout-animating="true"] .timeline-scrollport {
+    contain: layout paint;
+  }
+
+  .chat-column-motion[data-panel-layout-animating="true"] {
+    will-change: width;
+  }
+
+  .chat-column-motion[data-panel-layout-animating="true"] .chat-markdown .chat-markdown-file-link {
+    pointer-events: none;
+    overflow: hidden;
   }
 
   .chat-column-motion {
@@ -148,7 +174,6 @@
     transition:
       flex-basis var(--motion-duration-panel) var(--motion-ease-out),
       opacity calc(var(--motion-duration-panel) * 0.65) var(--motion-ease-out);
-    will-change: flex-basis, opacity;
   }
 
   .chat-column-motion[data-chat-column-maximized-away="true"] {

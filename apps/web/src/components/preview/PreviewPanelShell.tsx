@@ -1,10 +1,4 @@
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { isElectron } from "~/env";
 import { useResizableWidth } from "~/hooks/useResizableWidth";
@@ -21,6 +15,7 @@ const PREVIEW_PANEL_MAX_WIDTH_PX = 1400;
 /** Fraction of the viewport allowed; the panel is min(this · vw, MAX_PX). */
 const PREVIEW_PANEL_MAX_WIDTH_FRACTION = 0.7;
 const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
+const PANEL_MOTION_FALLBACK_MS = 450;
 
 /**
  * Shell for the preview panel. In inline mode the panel is user-resizable
@@ -31,6 +26,7 @@ export function PreviewPanelShell(props: {
   mode: PreviewPanelMode;
   maximized?: boolean;
   open?: boolean;
+  onLayoutTransitionChange?: (isAnimating: boolean) => void;
   children: ReactNode;
 }) {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
@@ -38,6 +34,12 @@ export function PreviewPanelShell(props: {
   const isOpen = props.open ?? true;
   const isMaximized = Boolean(props.maximized);
   const shellRef = useRef<HTMLDivElement>(null);
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const [isFlexExpanded, setIsFlexExpanded] = useState(isOpen);
+  const isFlexExpandedRef = useRef(isFlexExpanded);
+  isFlexExpandedRef.current = isFlexExpanded;
+  const [isAnimating, setIsAnimating] = useState(false);
   const viewportWidth = useViewportWidth();
   const maxWidth = getViewportClampedMaxWidth(viewportWidth);
 
@@ -60,10 +62,77 @@ export function PreviewPanelShell(props: {
     onDragEnd: restoreTransitions,
   });
 
+  const setLayoutAnimating = useCallback(
+    (next: boolean) => {
+      setIsAnimating(next);
+      props.onLayoutTransitionChange?.(next);
+    },
+    [props.onLayoutTransitionChange],
+  );
+
+  useLayoutEffect(() => {
+    if (!isInline) return;
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) {
+      setIsFlexExpanded(isOpen);
+      setLayoutAnimating(false);
+      return;
+    }
+
+    if (isOpen) {
+      setIsFlexExpanded(false);
+      setLayoutAnimating(true);
+      let nestedFrameId = 0;
+      const frameId = window.requestAnimationFrame(() => {
+        shellRef.current?.getBoundingClientRect();
+        nestedFrameId = window.requestAnimationFrame(() => {
+          setIsFlexExpanded(true);
+        });
+      });
+      return () => {
+        window.cancelAnimationFrame(frameId);
+        if (nestedFrameId !== 0) {
+          window.cancelAnimationFrame(nestedFrameId);
+        }
+      };
+    }
+
+    setLayoutAnimating(true);
+    setIsFlexExpanded(false);
+  }, [isInline, isOpen, setLayoutAnimating]);
+
+  useEffect(() => {
+    if (!isInline) return;
+
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    const finishAnimation = () => {
+      const expanded = isFlexExpandedRef.current;
+      const open = isOpenRef.current;
+      if (open !== expanded) return;
+      setLayoutAnimating(false);
+    };
+
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.target !== shell) return;
+      if (event.propertyName !== "width" && event.propertyName !== "flex-basis") return;
+      finishAnimation();
+    };
+
+    shell.addEventListener("transitionend", onTransitionEnd);
+    const timeoutId = window.setTimeout(finishAnimation, PANEL_MOTION_FALLBACK_MS);
+    return () => {
+      shell.removeEventListener("transitionend", onTransitionEnd);
+      window.clearTimeout(timeoutId);
+    };
+  }, [isFlexExpanded, isInline, setLayoutAnimating]);
+
   const inlineStyle = isInline
     ? isMaximized
-      ? { flex: isOpen ? "1 1 0%" : "0 0 0px", minWidth: 0 }
-      : { flex: isOpen ? `0 0 ${width}px` : "0 0 0px", minWidth: 0 }
+      ? { flex: isFlexExpanded ? "1 1 0%" : "0 0 0px", minWidth: 0 }
+      : { flex: "0 0 auto", width: isFlexExpanded ? width : 0, minWidth: 0 }
     : undefined;
 
   const panelBody = (
@@ -82,6 +151,7 @@ export function PreviewPanelShell(props: {
         isInline && isMaximized ? "min-w-0 flex-1" : isInline ? "shrink-0" : "w-full",
       )}
       data-panel-open={isOpen ? "true" : "false"}
+      data-panel-animating={isAnimating ? "true" : "false"}
       data-preview-panel-maximized={isMaximized ? "true" : "false"}
       style={inlineStyle}
       data-preview-panel-mode={props.mode}

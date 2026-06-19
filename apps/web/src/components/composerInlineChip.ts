@@ -7,7 +7,7 @@ export const COMPOSER_INLINE_CHIP_CLASS_NAME = `${INLINE_CHIP_CLASS_NAME} select
 
 export const COMPOSER_INLINE_CHIP_ICON_CLASS_NAME = "size-3.5 shrink-0 opacity-85";
 
-export const CHAT_INLINE_CHIP_LABEL_CLASS_NAME = "truncate leading-tight";
+export const CHAT_INLINE_CHIP_LABEL_CLASS_NAME = "min-w-0 truncate leading-tight";
 
 export const COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME = `${CHAT_INLINE_CHIP_LABEL_CLASS_NAME} select-none`;
 
