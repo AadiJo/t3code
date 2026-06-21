@@ -293,6 +293,72 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 
+  it("stamps recorded user messages with the server clock, not the client createdAt", async () => {
+    // A client clock running ahead of the server would otherwise sort the
+    // assistant's first streamed message (server-stamped) above the user
+    // bubble. The user message must share the server clock with assistant
+    // messages and work-log activities so the timeline orders stably.
+    const clientCreatedAt = now();
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.make("cmd-project-clock-create"),
+        projectId: asProjectId("project-clock"),
+        title: "Project Clock",
+        workspaceRoot: "/tmp/project-clock",
+        defaultModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+        createdAt: clientCreatedAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("cmd-thread-clock-create"),
+        threadId: ThreadId.make("thread-clock"),
+        projectId: asProjectId("project-clock"),
+        title: "Thread",
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt: clientCreatedAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-clock"),
+        threadId: ThreadId.make("thread-clock"),
+        message: {
+          messageId: asMessageId("msg-clock"),
+          role: "user",
+          text: "hello",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: clientCreatedAt,
+      }),
+    );
+
+    const thread = (await system.readModel()).threads.find((entry) => entry.id === "thread-clock");
+    const userMessage = thread?.messages.find((message) => message.id === "msg-clock");
+    expect(userMessage).toBeDefined();
+    expect(userMessage?.createdAt).not.toBe(clientCreatedAt);
+    expect(userMessage?.createdAt.localeCompare(clientCreatedAt)).toBeGreaterThan(0);
+    await system.dispose();
+  });
+
   it("archives and unarchives threads through orchestration commands", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;

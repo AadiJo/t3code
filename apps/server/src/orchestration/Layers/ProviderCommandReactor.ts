@@ -3,6 +3,7 @@ import {
   CommandId,
   EventId,
   type ModelSelection,
+  type MessageId,
   type OrchestrationEvent,
   type OrchestrationThread,
   ProviderDriverKind,
@@ -396,6 +397,7 @@ const make = Effect.gen(function* () {
     createdAt: string,
     options?: {
       readonly modelSelection?: ModelSelection;
+      readonly pendingMessageId?: MessageId;
     },
   ) {
     const thread = yield* resolveThread(threadId);
@@ -415,6 +417,7 @@ const make = Effect.gen(function* () {
       thread.session !== null && thread.session.status !== "stopped" && activeSession
         ? thread.session
         : null;
+    const stoppedThreadSession = thread.session?.status === "stopped" ? thread.session : null;
     if (
       activeThreadSession !== null &&
       activeSession !== undefined &&
@@ -432,7 +435,7 @@ const make = Effect.gen(function* () {
       activeSession !== undefined &&
       activeSession.providerInstanceId !== undefined
         ? activeSession.providerInstanceId
-        : thread.modelSelection.instanceId;
+        : (stoppedThreadSession?.providerInstanceId ?? thread.modelSelection.instanceId);
     const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
     const desiredInstanceId = desiredModelSelection.instanceId;
     const currentInfo = yield* providerService.getInstanceInfo(currentInstanceId).pipe(
@@ -470,9 +473,14 @@ const make = Effect.gen(function* () {
       });
     }
     const preferredProvider: ProviderDriverKind = desiredDriverKind;
-    const hasStartedThreadSession =
-      activeThreadSession !== null || thread.session?.status === "stopped";
-    if (hasStartedThreadSession) {
+    const hasPriorConversationMessage =
+      options?.pendingMessageId === undefined
+        ? thread.messages.length > 0
+        : thread.messages.some((message) => message.id !== options.pendingMessageId);
+    const hasProviderTurnHistory = thread.latestTurn !== null || hasPriorConversationMessage;
+    const hasConversationBoundSession =
+      hasProviderTurnHistory || thread.session?.status === "stopped";
+    if (hasConversationBoundSession) {
       yield* rejectStartedThreadModelChangeIfRequired({
         threadId,
         currentModelSelection:
@@ -487,7 +495,7 @@ const make = Effect.gen(function* () {
       });
     }
     if (
-      hasStartedThreadSession &&
+      hasConversationBoundSession &&
       requestedModelSelection !== undefined &&
       requestedModelSelection.instanceId !== currentInstanceId
     ) {
@@ -568,6 +576,7 @@ const make = Effect.gen(function* () {
       const instanceChanged =
         requestedModelSelection !== undefined &&
         activeSession?.providerInstanceId !== requestedModelSelection.instanceId;
+      const driverChanged = currentInfo.driverKind !== desiredInfo.driverKind;
       const shouldRestartForModelChange = modelChanged && sessionModelSwitch === "unsupported";
       const previousModelSelection = threadModelSelections.get(threadId);
       const shouldRestartForModelSelectionChange =
@@ -585,9 +594,10 @@ const make = Effect.gen(function* () {
         return existingSessionThreadId;
       }
 
-      const resumeCursor = shouldRestartForModelChange
-        ? undefined
-        : (activeSession?.resumeCursor ?? undefined);
+      const resumeCursor =
+        shouldRestartForModelChange || driverChanged
+          ? undefined
+          : (activeSession?.resumeCursor ?? undefined);
       yield* Effect.logInfo("provider command reactor restarting provider session", {
         threadId,
         existingSessionThreadId,
@@ -603,6 +613,7 @@ const make = Effect.gen(function* () {
         cwdChanged,
         modelChanged,
         instanceChanged,
+        driverChanged,
         shouldRestartForModelChange,
         shouldRestartForModelSelectionChange,
         hasResumeCursor: resumeCursor !== undefined,
@@ -629,6 +640,7 @@ const make = Effect.gen(function* () {
 
   const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
+    readonly messageId: MessageId;
     readonly messageText: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
@@ -644,7 +656,9 @@ const make = Effect.gen(function* () {
     yield* ensureSessionForThread(
       input.threadId,
       input.createdAt,
-      input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {},
+      input.modelSelection !== undefined
+        ? { modelSelection: input.modelSelection, pendingMessageId: input.messageId }
+        : { pendingMessageId: input.messageId },
     );
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
@@ -677,7 +691,7 @@ const make = Effect.gen(function* () {
               model: activeSession.model,
             }
           : requestedModelSelection
-        : input.modelSelection;
+        : requestedModelSelection;
     const assistantDeliveryMode: "buffered" | "streaming" = yield* Effect.map(
       serverSettingsService.getSettings,
       (settings) => (settings.enableAssistantStreaming ? "streaming" : "buffered"),
@@ -900,6 +914,7 @@ const make = Effect.gen(function* () {
 
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
       threadId: event.payload.threadId,
+      messageId: event.payload.messageId,
       messageText: message.text,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined

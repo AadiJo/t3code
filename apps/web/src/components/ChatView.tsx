@@ -206,6 +206,7 @@ import {
   PullRequestDialogState,
   cloneComposerImageForRetry,
   deriveLockedProvider,
+  threadHasConversationContent,
   readFileAsDataUrl,
   resolveSendEnvMode,
   revokeBlobPreviewUrl,
@@ -4065,7 +4066,7 @@ function ChatViewContent(props: ChatViewProps) {
             environmentId: activeThread.environmentId,
             threadId: activeThread.id,
             createdAt,
-            ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
+            modelSelection: ctxSelectedModelSelection,
             runtimeMode,
             interactionMode,
           });
@@ -4276,7 +4277,7 @@ function ChatViewContent(props: ChatViewProps) {
           environmentId: sendEnvironmentId,
           threadId: threadIdForSend,
           createdAt: messageCreatedAt,
-          ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
+          modelSelection: ctxSelectedModelSelection,
           runtimeMode,
           interactionMode,
         });
@@ -4896,7 +4897,7 @@ function ChatViewContent(props: ChatViewProps) {
       }
       const reason = getStartedThreadModelChangeBlockReason({
         providers: providerStatuses,
-        hasStartedSession: activeThread.session !== null,
+        hasStartedSession: threadHasConversationContent(activeThread),
         currentModelSelection: activeThread.modelSelection,
         currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
         nextModelSelection: { instanceId, model },
@@ -4951,7 +4952,7 @@ function ChatViewContent(props: ChatViewProps) {
       };
       const modelChangeBlockReason = getStartedThreadModelChangeBlockReason({
         providers: providerStatuses,
-        hasStartedSession: activeThread.session !== null,
+        hasStartedSession: threadHasConversationContent(activeThread),
         currentModelSelection: activeThread.modelSelection,
         currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
         nextModelSelection,

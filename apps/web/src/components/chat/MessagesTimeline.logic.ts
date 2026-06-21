@@ -79,6 +79,12 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string | null;
       phase: "starting" | "running";
+    }
+  | {
+      kind: "turn-diff";
+      id: string;
+      createdAt: string;
+      turnSummary: TurnDiffSummary;
     };
 
 export interface StableMessagesTimelineRowsState {
@@ -338,6 +344,11 @@ export function deriveMessagesTimelineRows(input: {
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
+  // The active turn's diff rebinds to its latest assistant message, so rendered
+  // inline it sits above commands that arrive before the next message streams,
+  // then jumps below them. Hoist it out and append it as the turn's final row
+  // so commands and the working indicator always stay above the diff.
+  let activeTurnDiffSummary: TurnDiffSummary | undefined;
   const durationStartByMessageId = computeMessageDurationStart(
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
@@ -445,6 +456,14 @@ export function deriveMessagesTimelineRows(input: {
       terminalAssistantMessageIds.has(timelineEntry.message.id) &&
       !assistantTurnStillInProgress;
 
+    const boundTurnDiffSummary =
+      timelineEntry.message.role === "assistant"
+        ? input.turnDiffSummaryByAssistantMessageId.get(timelineEntry.message.id)
+        : undefined;
+    if (boundTurnDiffSummary && assistantTurnStillInProgress) {
+      activeTurnDiffSummary = boundTurnDiffSummary;
+    }
+
     nextRows.push({
       kind: "message",
       id: timelineEntry.id,
@@ -454,10 +473,7 @@ export function deriveMessagesTimelineRows(input: {
       showAssistantMeta,
       showAssistantCopyButton: showAssistantMeta,
       assistantCopyStreaming: timelineEntry.message.streaming || assistantTurnStillInProgress,
-      assistantTurnDiffSummary:
-        timelineEntry.message.role === "assistant"
-          ? input.turnDiffSummaryByAssistantMessageId.get(timelineEntry.message.id)
-          : undefined,
+      assistantTurnDiffSummary: assistantTurnStillInProgress ? undefined : boundTurnDiffSummary,
       revertTurnCount:
         timelineEntry.message.role === "user"
           ? input.revertTurnCountByUserMessageId.get(timelineEntry.message.id)
@@ -471,6 +487,15 @@ export function deriveMessagesTimelineRows(input: {
       id: "working-indicator-row",
       createdAt: input.activeTurnStartedAt,
       phase: input.workingPhase === "running" ? "running" : deriveWorkingPhase(input.latestTurn),
+    });
+  }
+
+  if (activeTurnDiffSummary) {
+    nextRows.push({
+      kind: "turn-diff",
+      id: `turn-diff:${activeTurnDiffSummary.turnId}`,
+      createdAt: activeTurnDiffSummary.completedAt,
+      turnSummary: activeTurnDiffSummary,
     });
   }
 
@@ -504,6 +529,11 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
   switch (a.kind) {
     case "working":
       return a.createdAt === (b as typeof a).createdAt && a.phase === (b as typeof a).phase;
+
+    case "turn-diff": {
+      const bd = b as typeof a;
+      return a.createdAt === bd.createdAt && a.turnSummary === bd.turnSummary;
+    }
 
     case "turn-fold": {
       const bf = b as typeof a;

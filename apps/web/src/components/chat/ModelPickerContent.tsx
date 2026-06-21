@@ -230,13 +230,25 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     }
     return disabled;
   }, [instanceEntries, isLocked, matchesLockedProvider]);
+  // Providers disabled in settings hide themselves from the picker rail
+  // entirely — their models are already excluded from the list via
+  // `readyInstanceSet`, so a grayed-out rail icon was the only remnant. The
+  // currently-active instance is always retained so a thread bound to a
+  // since-disabled provider still shows (and can switch away from) its entry.
+  const railInstanceEntries = useMemo(
+    () =>
+      instanceEntries.filter(
+        (entry) => entry.enabled || entry.instanceId === props.activeInstanceId,
+      ),
+    [instanceEntries, props.activeInstanceId],
+  );
   const sidebarInstanceEntries = useMemo(() => {
     if (!isLocked) {
-      return instanceEntries;
+      return railInstanceEntries;
     }
     const available: ProviderInstanceEntry[] = [];
     const disabled: ProviderInstanceEntry[] = [];
-    for (const entry of instanceEntries) {
+    for (const entry of railInstanceEntries) {
       if (matchesLockedProvider(entry)) {
         available.push(entry);
       } else {
@@ -244,7 +256,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       }
     }
     return [...available, ...disabled];
-  }, [instanceEntries, isLocked, matchesLockedProvider]);
+  }, [railInstanceEntries, isLocked, matchesLockedProvider]);
   const showSidebar = !isSearching && sidebarInstanceEntries.length > 0;
   const instanceOrder = useMemo(
     () => instanceEntries.map((entry) => entry.instanceId),

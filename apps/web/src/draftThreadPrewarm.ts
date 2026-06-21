@@ -1,5 +1,10 @@
 import { scopeThreadRef } from "@t3tools/client-runtime";
-import { DEFAULT_MODEL, ProviderInstanceId, type ScopedThreadRef } from "@t3tools/contracts";
+import {
+  DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_MODEL,
+  ProviderInstanceId,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { markPromotedDraftThreadByRef, type DraftSessionState } from "./composerDraftStore";
 import { readEnvironmentApi } from "./environmentApi";
@@ -62,7 +67,11 @@ export function prewarmDraftThreadSession(
 
   const modelSelection =
     draftProject.defaultModelSelection ??
-    createModelSelection(ProviderInstanceId.make("codex"), DEFAULT_MODEL);
+    createModelSelection(
+      ProviderInstanceId.make("codex"),
+      DEFAULT_MODEL,
+      DEFAULT_CODEX_MODEL_OPTIONS,
+    );
 
   const task = (async () => {
     try {

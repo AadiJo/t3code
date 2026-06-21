@@ -275,7 +275,11 @@ export function deriveLockedProvider(input: {
   selectedProvider: string | null;
   threadProvider: string | null;
 }): ProviderDriverKind | null {
-  if (!threadHasStarted(input.thread)) {
+  // Lock only once the conversation actually has content (a turn or a sent
+  // message). A prewarmed thread has a live `session` before the user sends
+  // anything, but we must let them pick a different provider up until that
+  // first message — so gate on conversation content, not session existence.
+  if (!threadHasConversationContent(input.thread)) {
     return null;
   }
   const sessionProvider = input.thread?.session?.provider ?? null;

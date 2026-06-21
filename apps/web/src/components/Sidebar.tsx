@@ -96,7 +96,7 @@ import { useModelPickerOpen } from "../modelPickerOpenState";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { useVcsStatus } from "../lib/vcsStatusState";
 import { readLocalApi } from "../localApi";
-import { useComposerDraftStore, type DraftThreadState } from "../composerDraftStore";
+import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { isHiddenPrewarmedThreadRef } from "../draftThreadPrewarm";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
@@ -179,6 +179,7 @@ import {
   resolveThreadStatusPill,
   orderItemsByPreferredIds,
   shouldClearThreadSelectionOnMouseDown,
+  shouldHideInactiveEmptyPromotedDraftThread,
   sortProjectsForSidebar,
   useThreadJumpHintVisibility,
   ThreadStatusPill,
@@ -211,27 +212,6 @@ import {
 import { SidebarProviderUpdatePill } from "./sidebar/SidebarProviderUpdatePill";
 import { openDiscoveredPort } from "./preview/openDiscoveredPort";
 
-function isInactiveEmptyPromotedDraftThread(input: {
-  thread: SidebarThreadSummary;
-  activeRouteThreadKey: string | null;
-  draftThreadsByThreadKey: Readonly<Record<string, DraftThreadState>>;
-}): boolean {
-  const threadRef = scopeThreadRef(input.thread.environmentId, input.thread.id);
-  const threadKey = scopedThreadKey(threadRef);
-  if (input.activeRouteThreadKey === threadKey || input.thread.latestUserMessageAt !== null) {
-    return false;
-  }
-
-  return Object.values(input.draftThreadsByThreadKey).some((draftThread) => {
-    const promotedTo = draftThread.promotedTo;
-    return (
-      promotedTo !== null &&
-      promotedTo !== undefined &&
-      promotedTo.environmentId === threadRef.environmentId &&
-      promotedTo.threadId === threadRef.threadId
-    );
-  });
-}
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -1241,16 +1221,20 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       });
     };
     const visibleProjectThreads = sortThreads(
-      projectThreads.filter(
-        (thread) =>
+      projectThreads.filter((thread) => {
+        const threadRef = scopeThreadRef(thread.environmentId, thread.id);
+        const threadKey = scopedThreadKey(threadRef);
+        return (
           thread.archivedAt === null &&
-          !isHiddenPrewarmedThreadRef(scopeThreadRef(thread.environmentId, thread.id)) &&
-          !isInactiveEmptyPromotedDraftThread({
+          !isHiddenPrewarmedThreadRef(threadRef) &&
+          !shouldHideInactiveEmptyPromotedDraftThread({
             thread,
+            threadKey,
             activeRouteThreadKey,
             draftThreadsByThreadKey,
-          }),
-      ),
+          })
+        );
+      }),
       threadSortOrder,
     );
     const projectStatus = resolveProjectStatusIndicator(

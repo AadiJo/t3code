@@ -80,6 +80,7 @@ interface FakeGitTextGeneration {
     stagedSummary: string;
     stagedPatch: string;
     includeBranch?: boolean;
+    customInstructions?: string | undefined;
     modelSelection: ModelSelection;
   }) => Effect.Effect<
     { subject: string; body: string; branch?: string | undefined },
@@ -651,6 +652,7 @@ function makeManager(input?: {
   ghScenario?: FakeGhScenario;
   textGeneration?: Partial<FakeGitTextGeneration>;
   setupScriptRunner?: ProjectSetupScriptRunnerShape;
+  serverSettings?: Partial<import("@t3tools/contracts").ServerSettings>;
 }) {
   const { service: gitHubCli, ghCalls } = createGitHubCliWithFakeGh(input?.ghScenario);
   const textGeneration = createTextGeneration(input?.textGeneration);
@@ -658,7 +660,7 @@ function makeManager(input?: {
     prefix: "t3-git-manager-test-",
   });
 
-  const serverSettingsLayer = ServerSettingsService.layerTest();
+  const serverSettingsLayer = ServerSettingsService.layerTest(input?.serverSettings);
 
   const vcsDriverLayer = GitVcsDriver.layer.pipe(
     Layer.provideMerge(VcsProcess.layer),
@@ -1423,6 +1425,51 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           Effect.map((result) => result.stdout.trim()),
         ),
       ).toContain("- details from user");
+    }),
+  );
+
+  it.effect("passes saved commit message instructions into commit generation", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      fs.writeFileSync(path.join(repoDir, "README.md"), "hello\ninstructions\n");
+
+      let seenCustomInstructions: string | undefined;
+
+      const { manager } = yield* makeManager({
+        serverSettings: {
+          commitMessageInstructions:
+            "Always use lowercase conventional commit prefixes and mention migrations when present.",
+        },
+        textGeneration: {
+          generateCommitMessage: (input) =>
+            Effect.sync(() => {
+              seenCustomInstructions = input.customInstructions;
+              return {
+                subject: "fix: apply saved commit instructions",
+                body: "",
+                ...(input.includeBranch
+                  ? { branch: "feature/apply-saved-commit-instructions" }
+                  : {}),
+              };
+            }),
+        },
+      });
+
+      const result = yield* runStackedAction(manager, {
+        cwd: repoDir,
+        action: "commit",
+      });
+
+      expect(result.commit.status).toBe("created");
+      expect(seenCustomInstructions).toBe(
+        "Always use lowercase conventional commit prefixes and mention migrations when present.",
+      );
+      expect(
+        yield* runGit(repoDir, ["log", "-1", "--pretty=%s"]).pipe(
+          Effect.map((gitResult) => gitResult.stdout.trim()),
+        ),
+      ).toBe("fix: apply saved commit instructions");
     }),
   );
 

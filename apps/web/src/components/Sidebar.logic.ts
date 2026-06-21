@@ -160,6 +160,42 @@ export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null
   return !target.closest(THREAD_SELECTION_SAFE_SELECTOR);
 }
 
+export function shouldHideInactiveEmptyPromotedDraftThread(input: {
+  thread: Pick<SidebarThreadSummary, "environmentId" | "id" | "latestTurn" | "session"> & {
+    readonly latestUserMessageAt?: string | null;
+  };
+  activeRouteThreadKey: string | null;
+  threadKey: string;
+  draftThreadsByThreadKey: Readonly<
+    Record<
+      string,
+      {
+        readonly promotedTo?: { readonly environmentId: string; readonly threadId: string } | null;
+      }
+    >
+  >;
+}): boolean {
+  if (input.activeRouteThreadKey === input.threadKey) {
+    return false;
+  }
+  if (input.thread.latestUserMessageAt != null || input.thread.latestTurn !== null) {
+    return false;
+  }
+  if (input.thread.session !== null && input.thread.session.status !== "closed") {
+    return false;
+  }
+
+  return Object.values(input.draftThreadsByThreadKey).some((draftThread) => {
+    const promotedTo = draftThread.promotedTo;
+    return (
+      promotedTo !== null &&
+      promotedTo !== undefined &&
+      promotedTo.environmentId === input.thread.environmentId &&
+      promotedTo.threadId === input.thread.id
+    );
+  });
+}
+
 // A double-click dispatches two `click` events before `dblclick`: the first has
 // `detail === 1`, the second `detail === 2`. The second click must not run the
 // row's single-click navigation, otherwise double-click-to-rename would also

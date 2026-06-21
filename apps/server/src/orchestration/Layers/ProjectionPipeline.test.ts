@@ -4,6 +4,7 @@ import {
   CorrelationId,
   EventId,
   MessageId,
+  ModelSelection,
   ProjectId,
   ThreadId,
   TurnId,
@@ -15,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
@@ -51,6 +53,7 @@ const exists = (filePath: string) =>
   });
 
 const BaseTestLayer = makeProjectionPipelinePrefixedTestLayer("t3-projection-pipeline-test-");
+const decodeModelSelectionJson = Schema.decodeUnknownSync(Schema.fromJsonString(ModelSelection));
 
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("bootstraps all projection states and writes projection rows", () =>
@@ -171,6 +174,117 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       for (const row of stateRows) {
         assert.equal(row.lastAppliedSequence, 3);
       }
+    }),
+  );
+
+  it.effect("projects turn-start model selection onto the thread row", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const startedAt = "2026-01-01T00:00:05.000Z";
+
+      yield* eventStore.append({
+        type: "project.created",
+        eventId: EventId.make("evt-turn-model-project"),
+        aggregateKind: "project",
+        aggregateId: ProjectId.make("project-turn-model"),
+        occurredAt: createdAt,
+        commandId: CommandId.make("cmd-turn-model-project"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-turn-model-project"),
+        metadata: {},
+        payload: {
+          projectId: ProjectId.make("project-turn-model"),
+          title: "Project",
+          workspaceRoot: "/tmp/project-turn-model",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+      yield* eventStore.append({
+        type: "thread.created",
+        eventId: EventId.make("evt-turn-model-thread"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-turn-model"),
+        occurredAt: createdAt,
+        commandId: CommandId.make("cmd-turn-model-thread"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-turn-model-thread"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-turn-model"),
+          projectId: ProjectId.make("project-turn-model"),
+          title: "Thread",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.4",
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      });
+      yield* eventStore.append({
+        type: "thread.turn-start-requested",
+        eventId: EventId.make("evt-turn-model-start"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-turn-model"),
+        occurredAt: startedAt,
+        commandId: CommandId.make("cmd-turn-model-start"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-turn-model-start"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-turn-model"),
+          messageId: MessageId.make("message-turn-model"),
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.5",
+            options: [
+              { id: "reasoningEffort", value: "low" },
+              { id: "fastMode", value: true },
+            ],
+          },
+          runtimeMode: "approval-required",
+          interactionMode: "plan",
+          createdAt: startedAt,
+        },
+      });
+
+      yield* projectionPipeline.bootstrap;
+
+      const rows = yield* sql<{
+        readonly modelSelection: string;
+        readonly runtimeMode: string;
+        readonly interactionMode: string;
+      }>`
+        SELECT
+          model_selection_json AS "modelSelection",
+          runtime_mode AS "runtimeMode",
+          interaction_mode AS "interactionMode"
+        FROM projection_threads
+        WHERE thread_id = 'thread-turn-model'
+      `;
+
+      const row = rows[0];
+      assert.ok(row);
+      assert.deepStrictEqual(decodeModelSelectionJson(row.modelSelection), {
+        instanceId: ProviderInstanceId.make("codex"),
+        model: "gpt-5.5",
+        options: [
+          { id: "reasoningEffort", value: "low" },
+          { id: "fastMode", value: true },
+        ],
+      });
+      assert.strictEqual(rows[0]?.runtimeMode, "approval-required");
+      assert.strictEqual(rows[0]?.interactionMode, "plan");
     }),
   );
 });

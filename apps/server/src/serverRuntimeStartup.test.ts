@@ -1,5 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_MODEL, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import {
+  DEFAULT_CODEX_MODEL_OPTIONS,
+  DEFAULT_MODEL,
+  ProjectId,
+  ProviderInstanceId,
+  ThreadId,
+} from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
@@ -30,6 +36,7 @@ it("uses the canonical Codex default for auto-bootstrapped model selection", () 
   assert.deepStrictEqual(getAutoBootstrapDefaultModelSelection(), {
     instanceId: ProviderInstanceId.make("codex"),
     model: DEFAULT_MODEL,
+    options: DEFAULT_CODEX_MODEL_OPTIONS,
   });
 });
 

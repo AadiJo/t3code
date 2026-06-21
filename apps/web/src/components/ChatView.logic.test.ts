@@ -17,6 +17,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
+  deriveLockedProvider,
   getStartedThreadModelChangeBlockReason,
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
@@ -181,6 +182,59 @@ describe("getStartedThreadModelChangeBlockReason", () => {
       description:
         "This provider does not allow switching models after a conversation has started.",
     });
+  });
+});
+
+describe("deriveLockedProvider", () => {
+  const prewarmedSession = {
+    provider: ProviderDriverKind.make("codex"),
+    status: "ready" as const,
+    createdAt: "2026-03-29T00:00:00.000Z",
+    updatedAt: "2026-03-29T00:00:10.000Z",
+    orchestrationStatus: "idle" as const,
+  };
+
+  it("stays unlocked for a prewarmed thread with a session but no conversation content", () => {
+    const thread: Thread = { ...makeThread(), session: prewarmedSession };
+    expect(
+      deriveLockedProvider({
+        thread,
+        selectedProvider: ProviderInstanceId.make("grok"),
+        threadProvider: ProviderDriverKind.make("codex"),
+      }),
+    ).toBeNull();
+  });
+
+  it("locks to the session provider once the first message has been sent", () => {
+    const thread: Thread = {
+      ...makeThread({
+        latestTurn: {
+          turnId: TurnId.make("turn-1"),
+          state: "running",
+          requestedAt: "2026-03-29T00:01:00.000Z",
+          startedAt: "2026-03-29T00:01:01.000Z",
+          completedAt: null,
+        },
+      }),
+      session: prewarmedSession,
+    };
+    expect(
+      deriveLockedProvider({
+        thread,
+        selectedProvider: ProviderInstanceId.make("grok"),
+        threadProvider: ProviderDriverKind.make("codex"),
+      }),
+    ).toBe(ProviderDriverKind.make("codex"));
+  });
+
+  it("stays unlocked for a fresh draft thread with no session or content", () => {
+    expect(
+      deriveLockedProvider({
+        thread: makeThread(),
+        selectedProvider: ProviderInstanceId.make("codex"),
+        threadProvider: ProviderDriverKind.make("codex"),
+      }),
+    ).toBeNull();
   });
 });
 

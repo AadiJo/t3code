@@ -416,6 +416,13 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to thread '${sourceThread.id}' in a different project.`,
         });
       }
+      // Stamp the recorded user message with the server clock rather than the
+      // client-supplied `command.createdAt`. Assistant messages and work-log
+      // activities are all stamped server-side (`nowIso`), and the timeline is
+      // ordered purely by `createdAt`. Mixing a client clock here lets clock
+      // skew (client ahead of server) sort the assistant's first streamed
+      // message above the user bubble. A single clock keeps the order stable.
+      const userMessageCreatedAt = yield* nowIso;
       const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -432,8 +439,8 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           attachments: command.message.attachments,
           turnId: null,
           streaming: false,
-          createdAt: command.createdAt,
-          updatedAt: command.createdAt,
+          createdAt: userMessageCreatedAt,
+          updatedAt: userMessageCreatedAt,
         },
       };
       const turnStartRequestedEvent: Omit<OrchestrationEvent, "sequence"> = {

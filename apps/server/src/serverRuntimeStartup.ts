@@ -1,5 +1,6 @@
 import {
   CommandId,
+  DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   type ModelSelection,
@@ -157,6 +158,7 @@ export const launchStartupHeartbeat = recordStartupHeartbeat.pipe(
 export const getAutoBootstrapDefaultModelSelection = (): ModelSelection => ({
   instanceId: ProviderInstanceId.make("codex"),
   model: DEFAULT_MODEL,
+  options: [...DEFAULT_CODEX_MODEL_OPTIONS],
 });
 
 export const resolveWelcomeBase = Effect.gen(function* () {

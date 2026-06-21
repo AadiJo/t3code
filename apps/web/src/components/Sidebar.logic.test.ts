@@ -19,6 +19,7 @@ import {
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
+  shouldHideInactiveEmptyPromotedDraftThread,
   sortProjectsForSidebar,
   THREAD_JUMP_HINT_SHOW_DELAY_MS,
 } from "./Sidebar.logic";
@@ -169,6 +170,60 @@ describe("shouldClearThreadSelectionOnMouseDown", () => {
     } as unknown as HTMLElement;
 
     expect(shouldClearThreadSelectionOnMouseDown(unrelated)).toBe(true);
+  });
+});
+
+describe("shouldHideInactiveEmptyPromotedDraftThread", () => {
+  const threadKey = "environment-local:thread-1";
+  const promotedDraftThreads = {
+    [threadKey]: {
+      promotedTo: {
+        environmentId: localEnvironmentId,
+        threadId: ThreadId.make("thread-1"),
+      },
+    },
+  };
+
+  it("hides an inactive empty promoted draft without a live session", () => {
+    expect(
+      shouldHideInactiveEmptyPromotedDraftThread({
+        thread: makeThread({ latestTurn: null, session: null }),
+        activeRouteThreadKey: null,
+        threadKey,
+        draftThreadsByThreadKey: promotedDraftThreads,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the active route visible before the first message arrives", () => {
+    expect(
+      shouldHideInactiveEmptyPromotedDraftThread({
+        thread: makeThread({ latestTurn: null, session: null }),
+        activeRouteThreadKey: threadKey,
+        threadKey,
+        draftThreadsByThreadKey: promotedDraftThreads,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps empty promoted drafts visible while their provider session is alive", () => {
+    expect(
+      shouldHideInactiveEmptyPromotedDraftThread({
+        thread: makeThread({
+          latestTurn: null,
+          session: {
+            provider: ProviderDriverKind.make("codex"),
+            status: "ready",
+            createdAt: "2026-03-09T10:00:00.000Z",
+            updatedAt: "2026-03-09T10:00:00.000Z",
+            orchestrationStatus: "ready",
+          },
+        }),
+        activeRouteThreadKey: null,
+        threadKey,
+        draftThreadsByThreadKey: promotedDraftThreads,
+      }),
+    ).toBe(false);
   });
 });
 

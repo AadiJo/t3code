@@ -380,6 +380,72 @@ describe("deriveMessagesTimelineRows", () => {
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
 
+  it("hoists the active turn's diff into a trailing row below commands and the working indicator", () => {
+    const activeTurnDiffSummary = {
+      turnId: "turn-1" as never,
+      completedAt: "2026-01-01T00:00:30Z",
+      assistantMessageId: "assistant-1" as never,
+      checkpointTurnCount: 1,
+      files: [{ path: "src/index.ts", additions: 3, deletions: 1 }],
+    };
+
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "assistant-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:20Z",
+          message: {
+            id: "assistant-1" as never,
+            role: "assistant",
+            text: "Patch is in.",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:20Z",
+            completedAt: "2026-01-01T00:00:21Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry-1",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:25Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:25Z",
+            turnId: "turn-1" as never,
+            label: "Ran command",
+            tone: "tool" as const,
+          },
+        },
+      ],
+      latestTurn: {
+        turnId: "turn-1" as never,
+        state: "running",
+        startedAt: "2026-01-01T00:00:00Z",
+        completedAt: null,
+      },
+      isWorking: true,
+      activeTurnStartedAt: "2026-01-01T00:00:00Z",
+      turnDiffSummaryByAssistantMessageId: new Map([
+        ["assistant-1" as never, activeTurnDiffSummary],
+      ]),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.id)).toEqual([
+      "assistant-entry",
+      "work-entry-1",
+      "working-indicator-row",
+      "turn-diff:turn-1",
+    ]);
+    const assistantRow = rows.find((row) => row.id === "assistant-entry");
+    expect(assistantRow?.kind === "message" && assistantRow.assistantTurnDiffSummary).toBe(
+      undefined,
+    );
+    const diffRow = rows.find((row) => row.id === "turn-diff:turn-1");
+    expect(diffRow).toMatchObject({ kind: "turn-diff", turnSummary: activeTurnDiffSummary });
+  });
+
   it("folds settled-turn commentary and work behind a Worked-for row", () => {
     const timelineEntries = [
       {

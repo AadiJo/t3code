@@ -454,6 +454,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
         <GoalTimelineRow row={row} timestampFormat={ctx.timestampFormat} />
       ) : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
+      {row.kind === "turn-diff" ? <TurnDiffTimelineRow row={row} /> : null}
     </div>
   );
 });
@@ -699,6 +700,23 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
           )}
         </span>
       </div>
+    </div>
+  );
+}
+
+/** The active turn's changed-files diff, hoisted out of its assistant message
+ *  row so it always renders below the turn's commands and working indicator.
+ *  Settled turns render their diff inline beneath the terminal message instead. */
+function TurnDiffTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-diff" }> }) {
+  const ctx = use(TimelineRowCtx);
+  return (
+    <div className="min-w-0 px-1 py-0.5">
+      <AssistantChangedFilesSection
+        turnSummary={row.turnSummary}
+        routeThreadKey={ctx.routeThreadKey}
+        resolvedTheme={ctx.resolvedTheme}
+        onOpenTurnDiff={ctx.onOpenTurnDiff}
+      />
     </div>
   );
 }

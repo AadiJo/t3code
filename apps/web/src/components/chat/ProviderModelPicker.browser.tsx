@@ -1261,7 +1261,7 @@ describe("ProviderModelPicker", () => {
     }
   });
 
-  it("shows disabled providers grayed out in sidebar", async () => {
+  it("hides providers disabled in settings from the sidebar", async () => {
     const disabledProviders = TEST_PROVIDERS.slice();
     const claudeIndex = disabledProviders.findIndex(
       (provider) => provider.instanceId === ProviderInstanceId.make("claudeAgent"),
@@ -1287,7 +1287,8 @@ describe("ProviderModelPicker", () => {
       await vi.waitFor(() => {
         const text = document.body.textContent ?? "";
         expect(text).toContain("GPT-5 Codex");
-        // Disabled provider should not have its models shown
+        // The disabled provider hides itself entirely: no rail icon and no models.
+        expect(document.querySelector('[data-model-picker-provider="claudeAgent"]')).toBeNull();
         expect(text).not.toContain("Claude Opus 4.6");
       });
     } finally {
