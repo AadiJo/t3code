@@ -4,22 +4,41 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 
 const HEIGHT_TRANSITION_FALLBACK_MS = 250;
 
-export function AnimatedHeight({ children }: { readonly children: ReactNode }) {
+export function AnimatedHeight({
+  children,
+  open = true,
+}: {
+  readonly children: ReactNode;
+  readonly open?: boolean;
+}) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [renderChildren, setRenderChildren] = useState(open);
   const [heightState, setHeightState] = useState<{
     readonly height: number | null;
     readonly isClipping: boolean;
   }>({ height: null, isClipping: false });
 
   useEffect(() => {
+    if (open) {
+      setRenderChildren(true);
+    }
+  }, [open]);
+
+  useEffect(() => {
     if (!heightState.isClipping) return;
     const timeoutId = window.setTimeout(() => {
-      setHeightState((currentState) =>
-        currentState.isClipping ? { ...currentState, isClipping: false } : currentState,
-      );
+      setHeightState((currentState) => {
+        if (!currentState.isClipping) {
+          return currentState;
+        }
+        if (!open) {
+          setRenderChildren(false);
+        }
+        return { ...currentState, isClipping: false };
+      });
     }, HEIGHT_TRANSITION_FALLBACK_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [heightState.height, heightState.isClipping]);
+  }, [heightState.height, heightState.isClipping, open]);
 
   useLayoutEffect(() => {
     const element = contentRef.current;
@@ -75,17 +94,28 @@ export function AnimatedHeight({ children }: { readonly children: ReactNode }) {
       className="transition-[height] duration-200 ease-out motion-reduce:transition-none"
       style={
         heightState.height === null
-          ? undefined
-          : { height: heightState.height, overflow: heightState.isClipping ? "hidden" : "visible" }
+          ? open
+            ? undefined
+            : { height: 0, overflow: "hidden" }
+          : {
+              height: open ? heightState.height : 0,
+              overflow: !open || heightState.isClipping ? "hidden" : "visible",
+            }
       }
       onTransitionEnd={(event) => {
         if (event.target !== event.currentTarget || event.propertyName !== "height") return;
-        setHeightState((currentState) =>
-          currentState.isClipping ? { ...currentState, isClipping: false } : currentState,
-        );
+        setHeightState((currentState) => {
+          if (!currentState.isClipping) {
+            return currentState;
+          }
+          if (!open) {
+            setRenderChildren(false);
+          }
+          return { ...currentState, isClipping: false };
+        });
       }}
     >
-      <div ref={contentRef}>{children}</div>
+      <div ref={contentRef}>{renderChildren ? children : null}</div>
     </div>
   );
 }

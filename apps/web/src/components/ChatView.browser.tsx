@@ -5265,6 +5265,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       // The composer editor should be present for the new draft thread.
       await waitForComposerEditor();
+      await expect.element(page.getByTestId(`thread-row-${newThreadId}`)).not.toBeInTheDocument();
 
       // `thread.created` should only mark the draft as promoting; it should
       // not navigate away until the server thread has actual runtime state.

@@ -22,8 +22,15 @@ function draftThreadKey(draftSession: DraftSessionState): string {
 export function deletePrewarmedDraftThreadId(draftSession: DraftSessionState): void {
   const threadKey = draftThreadKey(draftSession);
   prewarmedDraftThreadIds.delete(threadKey);
-  hiddenPrewarmedDraftThreadIds.delete(threadKey);
   prewarmTasks.delete(threadKey);
+  // Intentionally keep the hidden-thread entry. This is only called while
+  // abandoning an empty prewarmed thread (a `thread.delete` was just
+  // dispatched). The delete is async, so the thread still lives in the store
+  // for a beat; clearing the hidden flag now would reveal the row just long
+  // enough for the list's auto-animate to play an exit animation once the
+  // delete lands — a "deleting a thread that never appeared" flicker. Leaving
+  // the key suppresses the row until the store drops it. The stale entry is
+  // harmless: thread ids are unique, so it is never matched again.
 }
 
 export function isHiddenPrewarmedThreadRef(threadRef: ScopedThreadRef): boolean {
@@ -155,6 +162,11 @@ export async function activatePrewarmedDraftThreadSession(
   draftSession: DraftSessionState,
   options?: {
     waitForPending?: boolean;
+    // Only reveal the prewarmed thread in the sidebar when the user actually
+    // commits to it (sends the first message). Merely opening/navigating to the
+    // draft must keep it hidden, otherwise empty prewarmed threads leak into the
+    // sidebar before anything has been sent.
+    revealInSidebar?: boolean;
   },
 ): Promise<void> {
   const threadKey = draftThreadKey(draftSession);
@@ -167,7 +179,9 @@ export async function activatePrewarmedDraftThreadSession(
     }
   }
 
-  hiddenPrewarmedDraftThreadIds.delete(threadKey);
+  if (options?.revealInSidebar === true) {
+    hiddenPrewarmedDraftThreadIds.delete(threadKey);
+  }
 
   void ensurePrewarmedDraftThreadSession(draftSession);
 }

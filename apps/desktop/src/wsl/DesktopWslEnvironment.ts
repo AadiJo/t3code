@@ -12,7 +12,11 @@ import { buildRemoteNodeEnvScript } from "@t3tools/ssh/tunnel";
 import { satisfiesSemverRange } from "@t3tools/shared/semver";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import { parseWslDistroList, type WslDistro } from "./wslPathParsing.ts";
+import {
+  parseWslDistroList,
+  windowsDrivePathToDefaultWslMountPath,
+  type WslDistro,
+} from "./wslPathParsing.ts";
 
 const PROCESS_TERMINATE_GRACE = Duration.seconds(1);
 const LIST_TIMEOUT = Duration.seconds(8);
@@ -460,6 +464,7 @@ const windowsToWslPathImpl = (
   distro: string | null,
   windowsPath: string,
 ): Effect.Effect<Option.Option<string>, never, ChildProcessSpawner.ChildProcessSpawner> => {
+  const fallback = Option.fromNullishOr(windowsDrivePathToDefaultWslMountPath(windowsPath));
   // wsl.exe interprets backslashes as escape chars; normalize to forward slashes.
   const normalized = windowsPath.replaceAll("\\", "/");
   return Effect.scoped(
@@ -486,7 +491,8 @@ const windowsToWslPathImpl = (
   ).pipe(
     Effect.timeoutOption(WSLPATH_TIMEOUT),
     Effect.map(Option.flatten),
-    Effect.orElseSucceed(() => Option.none<string>()),
+    Effect.map((converted) => (Option.isSome(converted) ? converted : fallback)),
+    Effect.orElseSucceed(() => fallback),
   );
 };
 

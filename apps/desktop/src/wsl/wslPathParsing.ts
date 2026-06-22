@@ -61,6 +61,19 @@ export function wslUncPathToLinuxPath(windowsPath: string): string | null {
   return `/${rest.split("\\").filter(Boolean).join("/")}`;
 }
 
+export function windowsDrivePathToDefaultWslMountPath(windowsPath: string): string | null {
+  const trimmed = windowsPath.trim();
+  const match = /^([A-Za-z]):[\\/](.*)$/.exec(trimmed);
+  if (!match) return null;
+
+  const drive = match[1]!.toLowerCase();
+  const rest = match[2]!
+    .split(/[\\/]+/)
+    .filter(Boolean)
+    .join("/");
+  return rest.length > 0 ? `/mnt/${drive}/${rest}` : `/mnt/${drive}`;
+}
+
 export function resolveWslHomeUncPath(
   config: WslConfig,
   distros: readonly WslDistro[],

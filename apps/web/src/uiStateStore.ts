@@ -21,6 +21,7 @@ export interface PersistedUiState {
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  threadLastVisitedAtById?: Record<string, string>;
 }
 
 export interface UiProjectState {
@@ -103,10 +104,30 @@ function readPersistedState(): UiState {
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
+      threadLastVisitedAtById: sanitizePersistedThreadLastVisitedAt(
+        parsed.threadLastVisitedAtById,
+      ),
     };
   } catch {
     return initialState;
   }
+}
+
+function sanitizePersistedThreadLastVisitedAt(
+  value: PersistedUiState["threadLastVisitedAtById"],
+): Record<string, string> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const nextState: Record<string, string> = {};
+  for (const [threadKey, visitedAt] of Object.entries(value)) {
+    if (threadKey && typeof visitedAt === "string" && !Number.isNaN(Date.parse(visitedAt))) {
+      nextState[threadKey] = visitedAt;
+    }
+  }
+
+  return nextState;
 }
 
 function sanitizePersistedThreadChangedFilesExpanded(
@@ -195,6 +216,7 @@ export function persistState(state: UiState): void {
         projectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpandedById,
+        threadLastVisitedAtById: state.threadLastVisitedAtById,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -228,23 +250,6 @@ function projectOrdersEqual(left: readonly string[], right: readonly string[]): 
   return (
     left.length === right.length && left.every((projectId, index) => projectId === right[index])
   );
-}
-
-function nestedBooleanRecordsEqual(
-  left: Record<string, Record<string, boolean>>,
-  right: Record<string, Record<string, boolean>>,
-): boolean {
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-  for (const [key, value] of leftEntries) {
-    if (!(key in right) || !recordsEqual(value, right[key]!)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export function syncProjects(state: UiState, projects: readonly SyncProjectInput[]): UiState {
@@ -407,12 +412,15 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
 }
 
 export function syncThreads(state: UiState, threads: readonly SyncThreadInput[]): UiState {
-  const retainedThreadIds = new Set(threads.map((thread) => thread.key));
-  const nextThreadLastVisitedAtById = Object.fromEntries(
-    Object.entries(state.threadLastVisitedAtById).filter(([threadId]) =>
-      retainedThreadIds.has(threadId),
-    ),
-  );
+  // Seed-only: add visit state for threads we have not seen before, but never
+  // prune. Snapshots load progressively (per environment, and incrementally),
+  // so the incoming thread list is not an authoritative "all threads that
+  // exist" set — pruning against it would drop persisted dismissals for threads
+  // that simply have not loaded yet, and a later sync would re-seed them with
+  // `createdAt` (predating `completedAt`), resurfacing the completed pill on
+  // every launch. Cleanup of genuinely deleted threads is owned by
+  // `clearThreadUi`, dispatched on the `thread-removed` event.
+  const nextThreadLastVisitedAtById = { ...state.threadLastVisitedAtById };
   for (const thread of threads) {
     if (
       nextThreadLastVisitedAtById[thread.key] === undefined &&
@@ -422,24 +430,12 @@ export function syncThreads(state: UiState, threads: readonly SyncThreadInput[])
       nextThreadLastVisitedAtById[thread.key] = thread.seedVisitedAt;
     }
   }
-  const nextThreadChangedFilesExpandedById = Object.fromEntries(
-    Object.entries(state.threadChangedFilesExpandedById).filter(([threadId]) =>
-      retainedThreadIds.has(threadId),
-    ),
-  );
-  if (
-    recordsEqual(state.threadLastVisitedAtById, nextThreadLastVisitedAtById) &&
-    nestedBooleanRecordsEqual(
-      state.threadChangedFilesExpandedById,
-      nextThreadChangedFilesExpandedById,
-    )
-  ) {
+  if (recordsEqual(state.threadLastVisitedAtById, nextThreadLastVisitedAtById)) {
     return state;
   }
   return {
     ...state,
     threadLastVisitedAtById: nextThreadLastVisitedAtById,
-    threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
   };
 }
 

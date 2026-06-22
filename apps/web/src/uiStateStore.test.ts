@@ -336,7 +336,12 @@ describe("uiStateStore pure functions", () => {
     expect(next.projectExpandedById[nextLogicalKey]).toBe(false);
   });
 
-  it("syncThreads prunes missing thread UI state", () => {
+  it("syncThreads preserves visit state for threads absent from the snapshot", () => {
+    // Snapshots load progressively (per environment, incrementally), so a
+    // thread missing from this sync may simply not have loaded yet. Pruning it
+    // here would drop a persisted dismissal and re-seed it with createdAt on a
+    // later sync, resurfacing the completed pill. Deletion cleanup is owned by
+    // clearThreadUi (dispatched on thread-removed), not syncThreads.
     const thread1 = ThreadId.make("thread-1");
     const thread2 = ThreadId.make("thread-2");
     const initialState = makeUiState({
@@ -344,25 +349,13 @@ describe("uiStateStore pure functions", () => {
         [thread1]: "2026-02-25T12:35:00.000Z",
         [thread2]: "2026-02-25T12:36:00.000Z",
       },
-      threadChangedFilesExpandedById: {
-        [thread1]: {
-          "turn-1": false,
-        },
-        [thread2]: {
-          "turn-2": false,
-        },
-      },
     });
 
     const next = syncThreads(initialState, [{ key: thread1 }]);
 
     expect(next.threadLastVisitedAtById).toEqual({
       [thread1]: "2026-02-25T12:35:00.000Z",
-    });
-    expect(next.threadChangedFilesExpandedById).toEqual({
-      [thread1]: {
-        "turn-1": false,
-      },
+      [thread2]: "2026-02-25T12:36:00.000Z",
     });
   });
 
@@ -379,6 +372,22 @@ describe("uiStateStore pure functions", () => {
 
     expect(next.threadLastVisitedAtById).toEqual({
       [thread1]: "2026-02-25T12:35:00.000Z",
+    });
+  });
+
+  it("syncThreads preserves unseen completions when the thread first appears after later updates", () => {
+    const thread1 = ThreadId.make("thread-1");
+    const initialState = makeUiState();
+
+    const next = syncThreads(initialState, [
+      {
+        key: thread1,
+        seedVisitedAt: "2026-02-25T12:30:00.000Z",
+      },
+    ]);
+
+    expect(next.threadLastVisitedAtById).toEqual({
+      [thread1]: "2026-02-25T12:30:00.000Z",
     });
   });
 
@@ -577,6 +586,23 @@ describe("uiStateStore persistence round-trip", () => {
       localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
     ) as PersistedUiState;
     expect(persisted.defaultAdvertisedEndpointKey).toBe("desktop-core:lan:http");
+  });
+
+  it("persists dismissed completion state so badges stay dismissed across restart", () => {
+    // Regression: threadLastVisitedAtById was in-memory only, so every restart
+    // reset all "visited" timestamps and re-surfaced the completed pill on
+    // threads the user had already opened.
+    const threadId = ThreadId.make("thread-visited");
+    const state = markThreadVisited(makeUiState(), threadId, "2026-02-25T12:30:00.700Z");
+
+    persistState(state);
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+    expect(persisted.threadLastVisitedAtById).toEqual({
+      [threadId]: "2026-02-25T12:30:00.700Z",
+    });
   });
 
   it("preserves expand state across restart when project's logical key changes", () => {

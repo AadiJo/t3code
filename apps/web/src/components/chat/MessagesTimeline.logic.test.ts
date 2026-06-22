@@ -5,7 +5,19 @@ import {
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
+  type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
+
+function flattenTimelineRows(rows: ReadonlyArray<MessagesTimelineRow>): MessagesTimelineRow[] {
+  const flattened: MessagesTimelineRow[] = [];
+  for (const row of rows) {
+    flattened.push(row);
+    if (row.kind === "turn-fold") {
+      flattened.push(...flattenTimelineRows(row.hiddenRows));
+    }
+  }
+  return flattened;
+}
 
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {
@@ -257,7 +269,7 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = rows.filter(
+    const assistantRows = flattenTimelineRows(rows).filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );
@@ -311,7 +323,7 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = rows.filter(
+    const assistantRows = flattenTimelineRows(rows).filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );
@@ -537,13 +549,17 @@ describe("deriveMessagesTimelineRows", () => {
     expect(expandedRows.map((row) => row.id)).toEqual([
       "user-entry",
       "turn-fold:turn-1",
-      "assistant-thought-entry",
-      "work-entry-1",
       "assistant-final-entry",
     ]);
-    expect(
-      expandedRows.find((row) => row.kind === "turn-fold" && row.expanded === true),
-    ).toBeDefined();
+    const expandedFoldRow = expandedRows.find(
+      (row): row is Extract<(typeof expandedRows)[number], { kind: "turn-fold" }> =>
+        row.kind === "turn-fold",
+    );
+    expect(expandedFoldRow?.expanded).toBe(true);
+    expect(expandedFoldRow?.hiddenRows.map((row) => row.id)).toEqual([
+      "assistant-thought-entry",
+      "work-entry-1",
+    ]);
   });
 
   it("derives a sane duration for a steer-superseded turn with one instant commentary message", () => {
@@ -939,7 +955,7 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = rows.filter(
+    const assistantRows = flattenTimelineRows(rows).filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );

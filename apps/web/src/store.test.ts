@@ -18,11 +18,13 @@ import {
   applyOrchestrationEvents,
   removeEnvironmentState,
   selectEnvironmentState,
+  selectSidebarThreadSummaryByRef,
   selectProjectsAcrossEnvironments,
   selectThreadByRef,
   selectThreadExistsByRef,
   setThreadBranch,
   selectThreadsAcrossEnvironments,
+  syncServerThreadDetail,
   type AppState,
   type EnvironmentState,
 } from "./store";
@@ -928,6 +930,98 @@ describe("incremental orchestration updates", () => {
     expect(threadsOf(next)[0]?.latestTurn?.assistantMessageId).toBe(
       MessageId.make("assistant-real"),
     );
+  });
+
+  it("updates sidebar latestTurn from thread detail before the shell summary catches up", () => {
+    const thread = makeThread({
+      latestTurn: {
+        turnId: TurnId.make("turn-1"),
+        state: "running",
+        requestedAt: "2026-02-27T00:00:01.000Z",
+        startedAt: "2026-02-27T00:00:02.000Z",
+        completedAt: null,
+        assistantMessageId: null,
+      },
+      session: {
+        provider: ProviderInstanceId.make("codex") as never,
+        status: "running",
+        orchestrationStatus: "running",
+        activeTurnId: TurnId.make("turn-1"),
+        createdAt: "2026-02-27T00:00:02.000Z",
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      },
+    });
+    const state = makeState(thread);
+    const environmentState = localEnvironmentStateOf(state);
+    environmentState.sidebarThreadSummaryById[thread.id] = {
+      id: thread.id,
+      environmentId: thread.environmentId,
+      projectId: thread.projectId,
+      title: thread.title,
+      interactionMode: thread.interactionMode,
+      session: thread.session,
+      createdAt: thread.createdAt,
+      archivedAt: thread.archivedAt,
+      updatedAt: thread.updatedAt,
+      latestTurn: thread.latestTurn,
+      branch: thread.branch,
+      worktreePath: thread.worktreePath,
+      latestUserMessageAt: null,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      hasActionableProposedPlan: false,
+      goal: thread.goal,
+    };
+
+    const next = syncServerThreadDetail(
+      state,
+      {
+        id: thread.id,
+        projectId: thread.projectId,
+        title: thread.title,
+        modelSelection: thread.modelSelection,
+        runtimeMode: thread.runtimeMode,
+        interactionMode: thread.interactionMode,
+        session: {
+          threadId: thread.id,
+          providerName: "codex",
+          runtimeMode: "full-access",
+          status: "ready",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:05.000Z",
+        },
+        messages: [],
+        proposedPlans: [],
+        activities: [],
+        checkpoints: [],
+        createdAt: thread.createdAt,
+        archivedAt: thread.archivedAt,
+        updatedAt: "2026-02-27T00:00:05.000Z",
+        deletedAt: null,
+        latestTurn: {
+          turnId: TurnId.make("turn-1"),
+          state: "completed",
+          requestedAt: "2026-02-27T00:00:01.000Z",
+          startedAt: "2026-02-27T00:00:02.000Z",
+          completedAt: "2026-02-27T00:00:05.000Z",
+          assistantMessageId: MessageId.make("assistant-1"),
+        },
+        branch: thread.branch,
+        worktreePath: thread.worktreePath,
+        goal: thread.goal,
+      },
+      localEnvironmentId,
+    );
+
+    const sidebarThread = selectSidebarThreadSummaryByRef(
+      next,
+      scopeThreadRef(thread.environmentId, thread.id),
+    );
+    expect(sidebarThread?.latestTurn?.state).toBe("completed");
+    expect(sidebarThread?.latestTurn?.completedAt).toBe("2026-02-27T00:00:05.000Z");
+    expect(sidebarThread?.session?.status).toBe("ready");
+    expect(sidebarThread?.hasPendingApprovals).toBe(false);
   });
 
   it("reverts messages, plans, activities, and checkpoints by retained turns", () => {

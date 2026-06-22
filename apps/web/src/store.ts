@@ -461,6 +461,28 @@ function threadTurnStatesEqual(left: ThreadTurnState | undefined, right: ThreadT
   );
 }
 
+function mergedSidebarSummaryFromThreadDetail(
+  previousSummary: SidebarThreadSummary | undefined,
+  nextThread: Thread,
+): SidebarThreadSummary | undefined {
+  if (!previousSummary) {
+    return undefined;
+  }
+
+  const nextSummary: SidebarThreadSummary = {
+    ...previousSummary,
+    session: nextThread.session,
+    latestTurn: nextThread.latestTurn,
+    updatedAt: nextThread.updatedAt,
+    archivedAt: nextThread.archivedAt,
+    branch: nextThread.branch,
+    worktreePath: nextThread.worktreePath,
+    goal: nextThread.goal,
+  };
+
+  return sidebarThreadSummariesEqual(previousSummary, nextSummary) ? previousSummary : nextSummary;
+}
+
 function appendId<T extends string>(ids: readonly T[], id: T): T[] {
   return ids.includes(id) ? [...ids] : [...ids, id];
 }
@@ -699,6 +721,23 @@ function writeThreadState(
       turnDiffSummaryByThreadId: {
         ...nextState.turnDiffSummaryByThreadId,
         [nextThread.id]: nextTurnDiffSlice.byId,
+      },
+    };
+  }
+
+  const mergedSidebarSummary = mergedSidebarSummaryFromThreadDetail(
+    nextState.sidebarThreadSummaryById[nextThread.id],
+    nextThread,
+  );
+  if (
+    mergedSidebarSummary &&
+    mergedSidebarSummary !== nextState.sidebarThreadSummaryById[nextThread.id]
+  ) {
+    nextState = {
+      ...nextState,
+      sidebarThreadSummaryById: {
+        ...nextState.sidebarThreadSummaryById,
+        [nextThread.id]: mergedSidebarSummary,
       },
     };
   }

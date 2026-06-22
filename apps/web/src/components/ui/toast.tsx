@@ -358,13 +358,11 @@ function ToastBodyContent({
             <Icon className="in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
           </div>
         ) : null}
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col gap-0.5",
-            stackedActionLayout && "pr-5",
-          )}
-        >
-          <Toast.Title className="min-w-0 wrap-break-word font-medium" data-slot="toast-title" />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5">
+          <Toast.Title
+            className={cn("min-w-0 wrap-break-word font-medium", stackedActionLayout && "pr-5")}
+            data-slot="toast-title"
+          />
           <ToastDescriptionAndExpandable
             toastData={toastData}
             toastDescription={toastDescription}

@@ -256,8 +256,10 @@ function useNewThreadState() {
         applyStickyState(draftId);
         const draftSession = useComposerDraftStore.getState().getDraftSession(draftId);
         if (draftSession && project) {
+          // Keep prewarmed draft-backed server threads out of the sidebar until
+          // the user actually sends the first message in that draft.
           prewarmDraftThreadSession(draftSession, project, {
-            hideCreatedThread: options?.prewarmOnly === true,
+            hideCreatedThread: true,
           });
         }
         if (options?.prewarmOnly) {

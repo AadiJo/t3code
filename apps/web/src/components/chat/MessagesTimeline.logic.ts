@@ -48,6 +48,7 @@ export type MessagesTimelineRow =
       turnId: TurnId;
       label: string;
       expanded: boolean;
+      hiddenRows: MessagesTimelineRow[];
     }
   | {
       kind: "message";
@@ -177,6 +178,7 @@ interface TurnFold {
   anchorEntryId: string;
   createdAt: string;
   hiddenEntryIds: ReadonlySet<string>;
+  hiddenEntries: ReadonlyArray<TimelineEntry>;
   label: string;
 }
 
@@ -327,6 +329,7 @@ function deriveTurnFolds(input: {
       anchorEntryId: firstEntry.id,
       createdAt: firstEntry.createdAt,
       hiddenEntryIds,
+      hiddenEntries: group.entries.filter((entry) => hiddenEntryIds.has(entry.id)),
       label,
     });
   }
@@ -342,6 +345,7 @@ export function deriveMessagesTimelineRows(input: {
   activeTurnStartedAt: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
+  enableTurnFolds?: boolean;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
   // The active turn's diff rebinds to its latest assistant message, so rendered
@@ -352,22 +356,27 @@ export function deriveMessagesTimelineRows(input: {
   const durationStartByMessageId = computeMessageDurationStart(
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
-  const terminalAssistantMessageIds = deriveTerminalAssistantMessageIds(input.timelineEntries);
-  const finalAnswerStartedTurnIds = deriveFinalAnswerStartedTurnIds(input.timelineEntries);
-  const unsettledTurnId = deriveUnsettledTurnId(input.latestTurn ?? null);
-  const foldsByAnchorEntryId = deriveTurnFolds({
-    timelineEntries: input.timelineEntries,
-    terminalAssistantMessageIds,
-    finalAnswerStartedTurnIds,
-    latestTurn: input.latestTurn ?? null,
-    unsettledTurnId,
-  });
+  const enableTurnFolds = input.enableTurnFolds ?? true;
+  const terminalAssistantMessageIds = enableTurnFolds
+    ? deriveTerminalAssistantMessageIds(input.timelineEntries)
+    : new Set<string>();
+  const finalAnswerStartedTurnIds = enableTurnFolds
+    ? deriveFinalAnswerStartedTurnIds(input.timelineEntries)
+    : new Set<TurnId>();
+  const unsettledTurnId = enableTurnFolds ? deriveUnsettledTurnId(input.latestTurn ?? null) : null;
+  const foldsByAnchorEntryId = enableTurnFolds
+    ? deriveTurnFolds({
+        timelineEntries: input.timelineEntries,
+        terminalAssistantMessageIds,
+        finalAnswerStartedTurnIds,
+        latestTurn: input.latestTurn ?? null,
+        unsettledTurnId,
+      })
+    : new Map<string, TurnFold>();
   const collapsedEntryIds = new Set<string>();
   for (const fold of foldsByAnchorEntryId.values()) {
-    if (!input.expandedTurnIds?.has(fold.turnId)) {
-      for (const entryId of fold.hiddenEntryIds) {
-        collapsedEntryIds.add(entryId);
-      }
+    for (const entryId of fold.hiddenEntryIds) {
+      collapsedEntryIds.add(entryId);
     }
   }
 
@@ -386,6 +395,15 @@ export function deriveMessagesTimelineRows(input: {
         turnId: turnFold.turnId,
         label: turnFold.label,
         expanded: input.expandedTurnIds?.has(turnFold.turnId) ?? false,
+        hiddenRows: deriveMessagesTimelineRows({
+          timelineEntries: turnFold.hiddenEntries,
+          isWorking: false,
+          activeTurnStartedAt: null,
+          turnDiffSummaryByAssistantMessageId: input.turnDiffSummaryByAssistantMessageId,
+          revertTurnCountByUserMessageId: input.revertTurnCountByUserMessageId,
+          enableTurnFolds: false,
+          ...(input.workingPhase ? { workingPhase: input.workingPhase } : {}),
+        }),
       });
     }
 
@@ -537,7 +555,12 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "turn-fold": {
       const bf = b as typeof a;
-      return a.createdAt === bf.createdAt && a.label === bf.label && a.expanded === bf.expanded;
+      return (
+        a.createdAt === bf.createdAt &&
+        a.label === bf.label &&
+        a.expanded === bf.expanded &&
+        rowsMatch(a.hiddenRows, bf.hiddenRows)
+      );
     }
 
     case "proposed-plan":
@@ -564,4 +587,21 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       );
     }
   }
+}
+
+function rowsMatch(a: ReadonlyArray<MessagesTimelineRow>, b: ReadonlyArray<MessagesTimelineRow>) {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (!left || !right || !isRowUnchanged(left, right)) {
+      return false;
+    }
+  }
+  return true;
 }

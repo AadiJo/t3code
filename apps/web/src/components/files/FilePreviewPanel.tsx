@@ -1,3 +1,4 @@
+import { scopedThreadKey } from "@t3tools/client-runtime";
 import type {
   EditorId,
   EnvironmentId,
@@ -26,6 +27,7 @@ import { usePrimaryEnvironmentId } from "~/environments/primary/context";
 import { useTheme } from "~/hooks/useTheme";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
+import { useMarkdownViewPreferenceStore } from "~/markdownViewPreferenceStore";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -49,7 +51,11 @@ import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { LocalCommentAnnotation } from "./LocalCommentAnnotation";
 import { projectFileCacheKey } from "./fileContentRevision";
 import { fileBreadcrumbs } from "./filePath";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  isMarkdownPreviewFile,
+  setMarkdownTaskChecked,
+  shouldRenderMarkdownPreview,
+} from "./filePreviewMode";
 import { FileSaveCoordinator } from "./fileSaveCoordinator";
 import {
   confirmProjectFileQueryData,
@@ -629,18 +635,28 @@ export default function FilePreviewPanel({
   const { resolvedTheme } = useTheme();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const file = useProjectFileQuery(environmentId, cwd, relativePath);
+  const threadKey = scopedThreadKey(threadRef);
   const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
   const [sourceLineWrap, setSourceLineWrap] = useState(initialSourceLineWrap);
-  const [markdownView, setMarkdownView] = useState<{
-    path: string | null;
-    revealRequestId: number | null;
-  }>({ path: null, revealRequestId: null });
+  const [markdownPreviewOverride, setMarkdownPreviewOverride] = useState<{
+    path: string;
+    revealRequestId: number;
+  } | null>(null);
+  const markdownViewMode = useMarkdownViewPreferenceStore((state) => {
+    return state.byThreadKey[threadKey]?.markdownViewMode ?? "raw";
+  });
+  const setMarkdownViewMode = useMarkdownViewPreferenceStore((state) => state.setMarkdownViewMode);
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
-  const renderMarkdown =
-    isMarkdown &&
-    markdownView.path === relativePath &&
-    (revealLine === null || markdownView.revealRequestId === revealRequestId);
+  const renderMarkdown = shouldRenderMarkdownPreview({
+    isMarkdown,
+    markdownViewMode,
+    revealLine,
+    hasRevealOverride:
+      relativePath !== null &&
+      markdownPreviewOverride?.path === relativePath &&
+      markdownPreviewOverride.revealRequestId === revealRequestId,
+  });
   const canOpenInBrowser =
     relativePath !== null && isPreviewSupportedInRuntime() && isBrowserPreviewFile(relativePath);
   const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, cwd) : null;
@@ -656,6 +672,10 @@ export default function FilePreviewPanel({
     );
     currentCrumb?.scrollIntoView({ block: "nearest", inline: "end" });
   }, [relativePath]);
+
+  useEffect(() => {
+    setMarkdownPreviewOverride(null);
+  }, [threadKey]);
 
   const toggleExplorer = () => {
     setExplorerOpen((current) => {
@@ -741,10 +761,12 @@ export default function FilePreviewPanel({
                     className="shrink-0"
                     pressed={renderMarkdown}
                     onPressedChange={(pressed) => {
-                      setMarkdownView({
-                        path: pressed ? relativePath : null,
-                        revealRequestId: pressed ? revealRequestId : null,
-                      });
+                      setMarkdownViewMode(threadRef, pressed ? "preview" : "raw");
+                      if (pressed && relativePath && revealLine !== null) {
+                        setMarkdownPreviewOverride({ path: relativePath, revealRequestId });
+                        return;
+                      }
+                      setMarkdownPreviewOverride(null);
                     }}
                     aria-label={renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
                     variant="ghost"

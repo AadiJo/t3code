@@ -103,7 +103,12 @@ function DraftChatThreadRouteView() {
     if (!draftSession || serverThread || draftSession.envMode !== "local" || !draftProject) {
       return;
     }
-    prewarmDraftThreadSession(draftSession, draftProject);
+    // Keep the prewarmed server thread out of the sidebar until the user sends
+    // the first message, matching useHandleNewThread. Without this, navigating
+    // straight to a draft route (or any path that didn't pre-register the
+    // thread in prewarmedDraftThreadIds) creates the thread unhidden, so it
+    // briefly surfaces in the sidebar during the connecting phase.
+    prewarmDraftThreadSession(draftSession, draftProject, { hideCreatedThread: true });
   }, [draftProject, draftSession, serverThread]);
 
   useEffect(() => {

@@ -5,7 +5,11 @@ import {
   normalizeFileCommentRange,
   remapFileCommentAnnotations,
 } from "./fileCommentAnnotations";
-import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
+import {
+  isMarkdownPreviewFile,
+  setMarkdownTaskChecked,
+  shouldRenderMarkdownPreview,
+} from "./filePreviewMode";
 
 describe("file comment annotations", () => {
   it("normalizes and formats selected line ranges", () => {
@@ -78,5 +82,45 @@ describe("setMarkdownTaskChecked", () => {
   it("leaves the document unchanged for a stale or invalid marker offset", () => {
     expect(setMarkdownTaskChecked(markdown, 0, true)).toBe(markdown);
     expect(setMarkdownTaskChecked(markdown, 200, true)).toBe(markdown);
+  });
+});
+
+describe("shouldRenderMarkdownPreview", () => {
+  it("uses the thread preference for normal markdown opens", () => {
+    expect(
+      shouldRenderMarkdownPreview({
+        isMarkdown: true,
+        markdownViewMode: "preview",
+        revealLine: null,
+        hasRevealOverride: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRenderMarkdownPreview({
+        isMarkdown: true,
+        markdownViewMode: "raw",
+        revealLine: null,
+        hasRevealOverride: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("forces raw source for line reveals unless the current reveal was explicitly overridden", () => {
+    expect(
+      shouldRenderMarkdownPreview({
+        isMarkdown: true,
+        markdownViewMode: "preview",
+        revealLine: 12,
+        hasRevealOverride: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRenderMarkdownPreview({
+        isMarkdown: true,
+        markdownViewMode: "preview",
+        revealLine: 12,
+        hasRevealOverride: true,
+      }),
+    ).toBe(true);
   });
 });

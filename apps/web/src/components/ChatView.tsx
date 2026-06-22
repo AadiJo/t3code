@@ -3426,6 +3426,30 @@ function ChatViewContent(props: ChatViewProps) {
     }
   }, []);
 
+  // Single source of truth for *clearing* the pill: if we are actually at the
+  // end (lenient 8px DOM threshold), cancel any pending show and hide now. This
+  // is event-independent so the button can never get stuck visible while the
+  // timeline is at rest at the bottom (no scroll/mutation events firing).
+  const reconcileScrollButton = useCallback(() => {
+    if (!timelineIsAtEnd()) {
+      return;
+    }
+    showScrollDebouncer.current.cancel();
+    isAtEndRef.current = true;
+    setShowScrollToBottom(false);
+  }, [timelineIsAtEnd]);
+
+  // Clicking the pill is self-correcting: hide optimistically and reset the
+  // at-end state, then scroll. Relying on the resulting scroll events alone is
+  // unreliable — when already at (or within a few px of) the bottom the animated
+  // scroll produces no events and the button would otherwise linger.
+  const handleScrollToBottomClick = useCallback(() => {
+    showScrollDebouncer.current.cancel();
+    isAtEndRef.current = true;
+    setShowScrollToBottom(false);
+    scrollToEnd(true);
+  }, [scrollToEnd]);
+
   useEffect(() => {
     if (showScrollToBottom) {
       setRenderScrollToBottom(true);
@@ -3447,16 +3471,6 @@ function ChatViewContent(props: ChatViewProps) {
       return;
     }
 
-    const hideIfAtEnd = () => {
-      if (!timelineIsAtEnd()) {
-        return;
-      }
-
-      showScrollDebouncer.current.cancel();
-      isAtEndRef.current = true;
-      setShowScrollToBottom(false);
-    };
-
     let frameId: number | null = null;
     const scheduleRevalidation = () => {
       if (rightPanelLayoutAnimatingRef.current) {
@@ -3469,7 +3483,7 @@ function ChatViewContent(props: ChatViewProps) {
 
       frameId = window.requestAnimationFrame(() => {
         frameId = null;
-        hideIfAtEnd();
+        reconcileScrollButton();
       });
     };
 
@@ -3501,7 +3515,36 @@ function ChatViewContent(props: ChatViewProps) {
       mutationObserver?.disconnect();
       window.removeEventListener("resize", scheduleRevalidation);
     };
-  }, [isWorking, routeThreadKey, timelineEntries.length, timelineIsAtEnd]);
+  }, [isWorking, routeThreadKey, timelineEntries.length, reconcileScrollButton]);
+
+  // While the pill is visible, keep reconciling on a light interval. The
+  // observers above only fire on scroll/size/DOM changes; if the timeline
+  // settles at the bottom without another event (e.g. streaming stops, layout
+  // pass lands a frame late), this guarantees the pill still clears.
+  useEffect(() => {
+    if (!showScrollToBottom) {
+      return;
+    }
+    const intervalId = window.setInterval(reconcileScrollButton, 200);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [showScrollToBottom, reconcileScrollButton]);
+
+  // Revalidations are skipped while the right panel is animating (the scrollport
+  // is mid-resize and measurements are unreliable). Re-check once the animation
+  // settles so a hide that occurred during the animation isn't dropped.
+  useEffect(() => {
+    if (rightPanelLayoutAnimating) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      reconcileScrollButton();
+    });
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [rightPanelLayoutAnimating, reconcileScrollButton]);
 
   useEffect(() => {
     setPullRequestDialogState(null);
@@ -4129,7 +4172,12 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeProject) return;
     let draftThreadForSend = draftThread;
     if (isLocalDraftThread && draftThread?.envMode === "local") {
-      await activatePrewarmedDraftThreadSession(draftThread, { waitForPending: true });
+      await activatePrewarmedDraftThreadSession(draftThread, {
+        waitForPending: true,
+        // The user is sending the first message, so this thread should now
+        // become visible in the sidebar.
+        revealInSidebar: true,
+      });
       draftThreadForSend = draftId
         ? (useComposerDraftStore.getState().getDraftSession(draftId) ?? draftThread)
         : draftThread;
@@ -5261,7 +5309,7 @@ function ChatViewContent(props: ChatViewProps) {
                   >
                     <button
                       type="button"
-                      onClick={() => scrollToEnd(true)}
+                      onClick={handleScrollToBottomClick}
                       className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-white/8 bg-[#1d1d1d] px-3 py-1 text-xs text-white/70 opacity-100 shadow-[0_12px_30px_-16px_rgb(0_0_0/0.9),0_1px_0_rgb(255_255_255/0.06)_inset] transition-[border-color,color,transform,box-shadow] duration-180 ease-[var(--motion-ease-out)] hover:-translate-y-px hover:border-white/14 hover:text-white hover:cursor-pointer active:translate-y-0"
                     >
                       <ChevronDownIcon className="size-3.5" />

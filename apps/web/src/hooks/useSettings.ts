@@ -18,6 +18,7 @@ import {
   DEFAULT_UNIFIED_SETTINGS,
   UnifiedSettings,
 } from "@t3tools/contracts/settings";
+import { updateServerSettingsInLocalSecondaryEnvironments } from "~/environmentApi";
 import { ensureLocalApi } from "~/localApi";
 import * as Struct from "effect/Struct";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
@@ -203,6 +204,15 @@ export function useUpdateSettings() {
       }
       // Fire-and-forget RPC — push will reconcile on success
       void ensureLocalApi().server.updateSettings(serverPatch);
+      if (serverPatch.commitMessageInstructions !== undefined) {
+        for (const dispatch of updateServerSettingsInLocalSecondaryEnvironments({
+          commitMessageInstructions: serverPatch.commitMessageInstructions,
+        })) {
+          void dispatch.catch((error) => {
+            console.error("[SERVER_SETTINGS] secondary commit instructions sync failed", error);
+          });
+        }
+      }
     }
 
     if (Object.keys(clientPatch).length > 0) {

@@ -155,6 +155,13 @@ export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   return completedAt > lastVisitedAt;
 }
 
+function hasCompletedLatestTurn(thread: ThreadStatusInput): boolean {
+  return (
+    thread.latestTurn?.state === "completed" &&
+    isLatestTurnSettled(thread.latestTurn, thread.session)
+  );
+}
+
 export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
   return !target.closest(THREAD_SELECTION_SAFE_SELECTOR);
@@ -426,7 +433,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (hasUnseenCompletion(thread)) {
+  if (hasCompletedLatestTurn(thread) && hasUnseenCompletion(thread)) {
     return {
       label: "Completed",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",

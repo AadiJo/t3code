@@ -9,6 +9,12 @@ import { render } from "vitest-browser-react";
 
 const scrollToEndSpy = vi.fn();
 const getStateSpy = vi.fn(() => ({ isAtEnd: true }));
+let lastLegendListProps:
+  | {
+      maintainScrollAtEnd?: boolean | undefined;
+      maintainScrollAtEndThreshold?: number | undefined;
+    }
+  | undefined;
 
 vi.mock("@legendapp/list/react", async () => {
   const React = await import("react");
@@ -20,9 +26,16 @@ vi.mock("@legendapp/list/react", async () => {
     ListHeaderComponent?: React.ReactNode;
     ListFooterComponent?: React.ReactNode;
     className?: string;
+    maintainScrollAtEnd?: boolean;
+    maintainScrollAtEndThreshold?: number;
     onScroll?: React.UIEventHandler<HTMLDivElement>;
     ref?: React.Ref<LegendListRef>;
   }) {
+    lastLegendListProps = {
+      maintainScrollAtEnd: props.maintainScrollAtEnd,
+      maintainScrollAtEndThreshold: props.maintainScrollAtEndThreshold,
+    };
+
     React.useImperativeHandle(
       props.ref,
       () =>
@@ -113,6 +126,7 @@ describe("MessagesTimeline", () => {
   afterEach(() => {
     scrollToEndSpy.mockReset();
     getStateSpy.mockClear();
+    lastLegendListProps = undefined;
     vi.restoreAllMocks();
     document.body.innerHTML = "";
   });
@@ -267,6 +281,44 @@ describe("MessagesTimeline", () => {
 
       expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
       expect(getStateSpy).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("disables bottom-stick as soon as the user scrolls away from the end", async () => {
+    const props = buildProps();
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        timelineEntries={[
+          buildUserTimelineEntry("First message"),
+          buildAssistantTimelineEntry("Reply"),
+        ]}
+      />,
+    );
+
+    try {
+      expect(lastLegendListProps?.maintainScrollAtEnd).toBe(true);
+      expect(lastLegendListProps?.maintainScrollAtEndThreshold).toBe(0.001);
+
+      const scrollport = await vi.waitFor(() => {
+        const element = document.querySelector<HTMLElement>(".timeline-scrollport");
+        expect(element).not.toBeNull();
+        return element!;
+      });
+      Object.defineProperties(scrollport, {
+        clientHeight: { configurable: true, value: 300 },
+        scrollHeight: { configurable: true, value: 900 },
+        scrollTop: { configurable: true, value: 520 },
+      });
+
+      scrollport.dispatchEvent(new Event("scroll", { bubbles: true }));
+
+      await vi.waitFor(() => {
+        expect(lastLegendListProps?.maintainScrollAtEnd).toBe(false);
+      });
+      expect(props.onIsAtEndChange).toHaveBeenCalledWith(false);
     } finally {
       await screen.unmount();
     }
@@ -547,7 +599,10 @@ describe("MessagesTimeline", () => {
       await foldButton.click();
 
       await expect.element(foldButton).toHaveAttribute("aria-expanded", "false");
-      expect(document.body.textContent).not.toContain("Inspecting repository state");
+      expect(document.body.textContent).toContain("Inspecting repository state");
+      await vi.waitFor(() => {
+        expect(document.body.textContent).not.toContain("Inspecting repository state");
+      });
     } finally {
       await screen.unmount();
     }

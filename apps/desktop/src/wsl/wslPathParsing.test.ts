@@ -7,6 +7,7 @@ import {
   parseWslDistroList,
   resolveWslHomeUncPath,
   resolveWslPickFolderDefaultPath,
+  windowsDrivePathToDefaultWslMountPath,
   wslUncPathToLinuxPath,
 } from "./wslPathParsing.ts";
 
@@ -113,6 +114,30 @@ describe("wslUncPathToLinuxPath", () => {
   it("rejects invalid distro names and non-WSL paths", () => {
     expect(wslUncPathToLinuxPath("\\\\wsl.localhost\\bad!name\\home")).toBeNull();
     expect(wslUncPathToLinuxPath("C:\\Users\\Josh\\repo")).toBeNull();
+  });
+});
+
+describe("windowsDrivePathToDefaultWslMountPath", () => {
+  it("maps absolute Windows drive paths to the default WSL mount root", () => {
+    expect(windowsDrivePathToDefaultWslMountPath("D:\\Aadi\\W-Projects\\t3code")).toBe(
+      "/mnt/d/Aadi/W-Projects/t3code",
+    );
+  });
+
+  it("handles forward slashes, mixed separators, and drive roots", () => {
+    expect(windowsDrivePathToDefaultWslMountPath("C:/Users/test/.codex")).toBe(
+      "/mnt/c/Users/test/.codex",
+    );
+    expect(windowsDrivePathToDefaultWslMountPath("E:\\repo/dist\\bin.mjs")).toBe(
+      "/mnt/e/repo/dist/bin.mjs",
+    );
+    expect(windowsDrivePathToDefaultWslMountPath("D:\\")).toBe("/mnt/d");
+  });
+
+  it("rejects UNC and drive-relative paths", () => {
+    expect(windowsDrivePathToDefaultWslMountPath("\\\\wsl.localhost\\Ubuntu\\home")).toBeNull();
+    expect(windowsDrivePathToDefaultWslMountPath("D:relative\\path")).toBeNull();
+    expect(windowsDrivePathToDefaultWslMountPath("/already/linux")).toBeNull();
   });
 });
 

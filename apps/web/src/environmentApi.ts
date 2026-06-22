@@ -3,6 +3,7 @@ import type {
   EnvironmentApi,
   ProviderDriverKind,
   ProviderInstanceId,
+  ServerSettingsPatch,
   ServerProvider,
 } from "@t3tools/contracts";
 
@@ -226,6 +227,34 @@ export function updateProvidersInEnvironment(
   return targets.map((target) =>
     dispatchProviderUpdate(connection, isPrimary, target.driver, target.instanceId),
   );
+}
+
+interface LocalSecondaryEnvironmentSettingsSyncDependencies {
+  readonly listSavedEnvironmentRecords: typeof listSavedEnvironmentRecords;
+  readonly readEnvironmentConnection: typeof readEnvironmentConnection;
+}
+
+export function updateServerSettingsInLocalSecondaryEnvironments(
+  patch: ServerSettingsPatch,
+  dependencies: LocalSecondaryEnvironmentSettingsSyncDependencies = {
+    listSavedEnvironmentRecords,
+    readEnvironmentConnection,
+  },
+): ReadonlyArray<Promise<unknown>> {
+  const dispatches: Array<Promise<unknown>> = [];
+
+  for (const record of dependencies.listSavedEnvironmentRecords()) {
+    if (!record.desktopLocal) {
+      continue;
+    }
+    const connection = dependencies.readEnvironmentConnection(record.environmentId);
+    if (!connection) {
+      continue;
+    }
+    dispatches.push(connection.client.server.updateSettings(patch));
+  }
+
+  return dispatches;
 }
 
 export function __setEnvironmentApiOverrideForTests(

@@ -628,7 +628,7 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Completed", pulse: false });
   });
 
-  it("shows completed when there is an unseen completion and no active blocker", () => {
+  it("shows completed when the latest turn completed after the last visit", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -644,6 +644,24 @@ describe("resolveThreadStatusPill", () => {
         },
       }),
     ).toMatchObject({ label: "Completed", pulse: false });
+  });
+
+  it("hides the completed pill once the completion has been visited", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          interactionMode: "default",
+          latestTurn: makeLatestTurn(),
+          lastVisitedAt: "2026-03-09T10:06:00.000Z",
+          session: {
+            ...baseThread.session,
+            status: "ready",
+            orchestrationStatus: "ready",
+          },
+        },
+      }),
+    ).toBeNull();
   });
 });
 

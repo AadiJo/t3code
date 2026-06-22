@@ -83,6 +83,7 @@ import {
 } from "~/store";
 import { useTerminalUiStateStore } from "~/terminalUiStateStore";
 import { useUiStateStore } from "~/uiStateStore";
+import { useMarkdownViewPreferenceStore } from "~/markdownViewPreferenceStore";
 import { getServerConfig } from "../../rpc/serverState";
 import { WsTransport } from "~/rpc/wsTransport";
 import { appendVersionMismatchHint, resolveServerConfigVersionMismatch } from "../../versionSkew";
@@ -965,7 +966,7 @@ function syncThreadUiFromStore() {
   useUiStateStore.getState().syncThreads(
     threads.map((thread) => ({
       key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      seedVisitedAt: thread.updatedAt ?? thread.createdAt,
+      seedVisitedAt: thread.createdAt,
     })),
   );
   markPromotedDraftThreadsByRef(
@@ -1032,7 +1033,7 @@ function applyRecoveredEventBatch(
     useUiStateStore.getState().syncThreads(
       threads.map((thread) => ({
         key: scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        seedVisitedAt: thread.updatedAt ?? thread.createdAt,
+        seedVisitedAt: thread.createdAt,
       })),
     );
   }
@@ -1046,6 +1047,7 @@ function applyRecoveredEventBatch(
     useUiStateStore
       .getState()
       .clearThreadUi(scopedThreadKey(scopeThreadRef(environmentId, threadId)));
+    useMarkdownViewPreferenceStore.getState().removeThread(scopeThreadRef(environmentId, threadId));
   }
   for (const event of events) {
     if (event.type === "project.deleted") {
@@ -1112,6 +1114,7 @@ function applyShellEvent(event: OrchestrationShellStreamEvent, environmentId: En
         useComposerDraftStore.getState().clearDraftThread(threadRef);
         useUiStateStore.getState().clearThreadUi(scopedThreadKey(threadRef));
         useTerminalUiStateStore.getState().removeTerminalUiState(threadRef);
+        useMarkdownViewPreferenceStore.getState().removeThread(threadRef);
       }
       syncThreadUiFromStore();
       return;

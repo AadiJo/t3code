@@ -59,6 +59,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { AnimatedHeight } from "../AnimatedHeight";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
@@ -142,6 +143,7 @@ const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
 const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
+const TURN_FOLD_TRANSITION_MS = 220;
 
 // ---------------------------------------------------------------------------
 // Props (public API)
@@ -199,13 +201,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onIsAtEndChange,
 }: MessagesTimelineProps) {
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
+  const [stickToBottomEnabled, setStickToBottomEnabled] = useState(true);
 
-  // Toggling a fold inserts/removes rows between the fold row and the final
-  // message — everything above the trigger is unchanged, so the trigger stays
-  // put as long as the list doesn't re-anchor. maintainScrollAtEnd would do
-  // exactly that (pin the bottom content when row data changes while scrolled
-  // to the end), yanking the trigger out of view. Suppress it for the frames
-  // in which the toggle's data change and item measurements settle.
+  // Fold content now expands inline beneath the "Worked for..." trigger. Keep
+  // bottom-stick disabled through the height transition so the trigger stays
+  // put instead of being re-pinned offscreen while the row remeasures.
   const [foldToggleSettling, setFoldToggleSettling] = useState(false);
   const onToggleTurnFold = useCallback((turnId: TurnId) => {
     setFoldToggleSettling(true);
@@ -223,19 +223,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     if (!foldToggleSettling) {
       return;
     }
-    let secondFrameId: number | null = null;
-    const firstFrameId = window.requestAnimationFrame(() => {
-      secondFrameId = window.requestAnimationFrame(() => {
-        setFoldToggleSettling(false);
-      });
-    });
-    return () => {
-      window.cancelAnimationFrame(firstFrameId);
-      if (secondFrameId !== null) {
-        window.cancelAnimationFrame(secondFrameId);
-      }
-    };
+    const timeoutId = window.setTimeout(() => {
+      setFoldToggleSettling(false);
+    }, TURN_FOLD_TRANSITION_MS);
+    return () => window.clearTimeout(timeoutId);
   }, [foldToggleSettling]);
+
+  const syncStickToBottomEnabled = useCallback((isAtEnd: boolean) => {
+    setStickToBottomEnabled((current) => (current === isAtEnd ? current : isAtEnd));
+  }, []);
 
   // An in-session interrupt leaves its turn expanded so the user keeps their
   // place; the next turn (or a reload, since this is local state) folds it.
@@ -298,18 +294,24 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           ? event.currentTarget
           : null;
       if (scrollport instanceof HTMLElement) {
-        if (getVerticalScrollEndState(scrollport).isAtEnd) {
-          onIsAtEndChange(true);
+        // Button visibility uses the lenient 8px DOM threshold, consistently
+        // with the reconciliation logic in ChatView. Stickiness uses
+        // LegendList's stricter (near-pixel) state so manual scrolls break out
+        // of auto-pin immediately — the two intentionally differ.
+        const { isAtEnd } = getVerticalScrollEndState(scrollport);
+        onIsAtEndChange(isAtEnd);
+        if (!isAtEnd) {
+          syncStickToBottomEnabled(false);
           return;
         }
       }
 
       const state = listRef.current?.getState?.();
       if (state) {
-        onIsAtEndChange(state.isAtEnd);
+        syncStickToBottomEnabled(state.isAtEnd);
       }
     },
-    [listRef, onIsAtEndChange],
+    [listRef, onIsAtEndChange, syncStickToBottomEnabled],
   );
 
   const previousRowCountRef = useRef(rows.length);
@@ -322,13 +324,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
 
     onIsAtEndChange(true);
+    syncStickToBottomEnabled(true);
     const frameId = window.requestAnimationFrame(() => {
       void listRef.current?.scrollToEnd?.({ animated: false });
     });
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [listRef, onIsAtEndChange, rows.length]);
+  }, [listRef, onIsAtEndChange, rows.length, syncStickToBottomEnabled]);
+
+  useEffect(() => {
+    syncStickToBottomEnabled(true);
+  }, [routeThreadKey, syncStickToBottomEnabled]);
 
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
@@ -399,8 +406,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           renderItem={renderItem}
           estimatedItemSize={90}
           initialScrollAtEnd
-          maintainScrollAtEnd={!foldToggleSettling}
-          maintainScrollAtEndThreshold={0.1}
+          maintainScrollAtEnd={stickToBottomEnabled && !foldToggleSettling}
+          // LegendList's default "at end" threshold is 10% of the viewport,
+          // which can keep re-pinning the list after the user has already
+          // started scrolling away during streaming. Keep it effectively pixel-
+          // sized so manual scrolls break out immediately.
+          maintainScrollAtEndThreshold={0.001}
           maintainVisibleContentPosition
           onScroll={handleScroll}
           className="timeline-scrollport scrollbar-gutter-both h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
@@ -586,20 +597,34 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
 
 function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-fold" }> }) {
   const ctx = use(TimelineRowCtx);
-  const Icon = row.expanded ? ChevronDownIcon : ChevronRightIcon;
 
   return (
-    <div className="border-b border-border/60 pb-2 pt-1">
+    <div className="border-b border-border/60 pt-1">
       <button
         type="button"
         aria-expanded={row.expanded}
         data-scroll-anchor-ignore
         onClick={() => ctx.onToggleTurnFold(row.turnId)}
-        className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        className="flex w-full cursor-pointer select-none items-center gap-1 rounded-md px-1 py-1 text-left text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
         <span>{row.label}</span>
-        <Icon className="size-3.5" />
+        <ChevronRightIcon
+          className={cn(
+            "size-3.5 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            row.expanded && "rotate-90",
+          )}
+        />
       </button>
+      <AnimatedHeight open={row.expanded}>
+        <div
+          aria-hidden={!row.expanded}
+          className="ms-2 mt-0.5 overflow-hidden border-s border-border/45 pb-2 ps-3"
+        >
+          {row.hiddenRows.map((hiddenRow) => (
+            <TimelineRowContent key={hiddenRow.id} row={hiddenRow} />
+          ))}
+        </div>
+      </AnimatedHeight>
     </div>
   );
 }
