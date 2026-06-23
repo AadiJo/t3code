@@ -2,18 +2,22 @@ import { scopeProjectRef } from "@t3tools/client-runtime";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import ChatView from "../components/ChatView";
-import { threadHasConversationContent } from "../components/ChatView.logic";
+import {
+  shouldDeleteAbandonedPromotedDraftThread,
+  threadHasConversationContent,
+} from "../components/ChatView.logic";
 import { useComposerDraftStore, DraftId, type DraftSessionState } from "../composerDraftStore";
 import { SidebarInset } from "../components/ui/sidebar";
 import {
   createProjectSelectorByRef,
   createThreadSelectorAcrossEnvironments,
 } from "../storeSelectors";
-import { useStore } from "../store";
+import { selectSidebarThreadSummaryByRef, selectThreadByRef, useStore } from "../store";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { readEnvironmentApi } from "../environmentApi";
 import { newCommandId } from "../lib/utils";
 import type { Thread } from "../types";
+import { selectLocalDispatchSnapshot, useLocalDispatchStore } from "../localDispatchStore";
 import {
   deletePrewarmedDraftThreadId,
   ensurePrewarmedDraftThreadSession,
@@ -78,10 +82,26 @@ function DraftChatThreadRouteView() {
     return () => {
       const { draftSession: latestDraftSession, serverThread: latestServerThread } =
         cleanupStateRef.current;
+      if (!latestDraftSession?.promotedTo || !latestServerThread) {
+        return;
+      }
+
+      const latestThreadRef = latestDraftSession.promotedTo;
+      const latestState = useStore.getState();
+      const currentServerThread = selectThreadByRef(latestState, latestThreadRef);
+      const currentSidebarThread = selectSidebarThreadSummaryByRef(latestState, latestThreadRef);
+      const currentLocalDispatch = selectLocalDispatchSnapshot(
+        useLocalDispatchStore.getState().byThreadKey,
+        latestThreadRef,
+      );
       if (
-        !latestDraftSession?.promotedTo ||
-        !latestServerThread ||
-        latestServerThread.messages.length > 0
+        !shouldDeleteAbandonedPromotedDraftThread({
+          draftThread: latestDraftSession,
+          threadRef: latestThreadRef,
+          serverThread: currentServerThread ?? latestServerThread,
+          sidebarThread: currentSidebarThread,
+          hasLocalDispatch: currentLocalDispatch !== null,
+        })
       ) {
         return;
       }

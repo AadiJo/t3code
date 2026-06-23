@@ -8,6 +8,7 @@ import {
 } from "./CommandPalette.logic";
 
 const LOCAL_ENVIRONMENT_ID = EnvironmentId.make("environment-local");
+const WSL_ENVIRONMENT_ID = EnvironmentId.make("environment-wsl");
 const PROJECT_ID = ProjectId.make("project-1");
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -57,7 +58,7 @@ describe("buildThreadActionItems", () => {
             updatedAt: "2026-03-20T00:00:00.000Z",
           }),
         ],
-        projectTitleById: new Map([[PROJECT_ID, "Project"]]),
+        resolveProjectTitle: () => "Project",
         sortOrder: "updated_at",
         icon: null,
         runThread: async (_thread) => undefined,
@@ -89,7 +90,7 @@ describe("buildThreadActionItems", () => {
           updatedAt: "2026-03-19T00:00:00.000Z",
         }),
       ],
-      projectTitleById: new Map([[PROJECT_ID, "Project"]]),
+      resolveProjectTitle: () => "Project",
       sortOrder: "updated_at",
       icon: null,
       runThread: async (_thread) => undefined,
@@ -156,12 +157,43 @@ describe("buildThreadActionItems", () => {
           updatedAt: "2026-03-20T00:00:00.000Z",
         }),
       ],
-      projectTitleById: new Map([[PROJECT_ID, "Project"]]),
+      resolveProjectTitle: () => "Project",
       sortOrder: "updated_at",
       icon: null,
       runThread: async (_thread) => undefined,
     });
 
     expect(items.map((item) => item.value)).toEqual(["thread:thread-active"]);
+  });
+
+  it("resolves project titles with environment-scoped project identity", () => {
+    const items = buildThreadActionItems({
+      threads: [
+        makeThread({
+          id: ThreadId.make("thread-local"),
+          environmentId: LOCAL_ENVIRONMENT_ID,
+          projectId: PROJECT_ID,
+          title: "Local thread",
+        }),
+        makeThread({
+          id: ThreadId.make("thread-wsl"),
+          environmentId: WSL_ENVIRONMENT_ID,
+          projectId: PROJECT_ID,
+          title: "WSL thread",
+        }),
+      ],
+      resolveProjectTitle: (thread) =>
+        thread.environmentId === WSL_ENVIRONMENT_ID ? "WSL Project" : "Windows Project",
+      sortOrder: "updated_at",
+      icon: null,
+      runThread: async (_thread) => undefined,
+    });
+
+    expect(items.find((item) => item.value === "thread:thread-local")?.description).toContain(
+      "Windows Project",
+    );
+    expect(items.find((item) => item.value === "thread:thread-wsl")?.description).toContain(
+      "WSL Project",
+    );
   });
 });

@@ -206,7 +206,7 @@ describe("shouldHideInactiveEmptyPromotedDraftThread", () => {
     ).toBe(false);
   });
 
-  it("keeps empty promoted drafts visible while their provider session is alive", () => {
+  it("hides empty promoted drafts even when their prewarmed session rehydrates", () => {
     expect(
       shouldHideInactiveEmptyPromotedDraftThread({
         thread: makeThread({
@@ -223,7 +223,7 @@ describe("shouldHideInactiveEmptyPromotedDraftThread", () => {
         threadKey,
         draftThreadsByThreadKey: promotedDraftThreads,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
@@ -268,14 +268,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
   it("prefers the default worktree mode over active thread context", () => {
     expect(
       resolveSidebarNewThreadSeedContext({
+        environmentId: "environment-local",
         projectId: "project-1",
         defaultEnvMode: "worktree",
         activeThread: {
+          environmentId: "environment-local",
           projectId: "project-1",
           branch: "feature/existing",
           worktreePath: "/repo/.t3/worktrees/existing",
         },
         activeDraftThread: {
+          environmentId: "environment-local",
           projectId: "project-1",
           branch: "feature/draft",
           worktreePath: "/repo/.t3/worktrees/draft",
@@ -290,9 +293,11 @@ describe("resolveSidebarNewThreadSeedContext", () => {
   it("inherits the active server thread context when creating a new thread in the same project", () => {
     expect(
       resolveSidebarNewThreadSeedContext({
+        environmentId: "environment-local",
         projectId: "project-1",
         defaultEnvMode: "local",
         activeThread: {
+          environmentId: "environment-local",
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
@@ -309,14 +314,17 @@ describe("resolveSidebarNewThreadSeedContext", () => {
   it("prefers the active draft thread context when it matches the target project", () => {
     expect(
       resolveSidebarNewThreadSeedContext({
+        environmentId: "environment-local",
         projectId: "project-1",
         defaultEnvMode: "local",
         activeThread: {
+          environmentId: "environment-local",
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
         },
         activeDraftThread: {
+          environmentId: "environment-local",
           projectId: "project-1",
           branch: "feature/new-draft",
           worktreePath: "/repo/worktree",
@@ -333,9 +341,11 @@ describe("resolveSidebarNewThreadSeedContext", () => {
   it("falls back to the default env mode when there is no matching active thread context", () => {
     expect(
       resolveSidebarNewThreadSeedContext({
+        environmentId: "environment-local",
         projectId: "project-2",
         defaultEnvMode: "worktree",
         activeThread: {
+          environmentId: "environment-local",
           projectId: "project-1",
           branch: "effect-atom",
           worktreePath: null,
@@ -344,6 +354,31 @@ describe("resolveSidebarNewThreadSeedContext", () => {
       }),
     ).toEqual({
       envMode: "worktree",
+    });
+  });
+
+  it("does not reuse thread context from another environment with the same project id", () => {
+    expect(
+      resolveSidebarNewThreadSeedContext({
+        environmentId: "environment-wsl",
+        projectId: "project-1",
+        defaultEnvMode: "local",
+        activeThread: {
+          environmentId: "environment-local",
+          projectId: "project-1",
+          branch: "windows-branch",
+          worktreePath: null,
+        },
+        activeDraftThread: {
+          environmentId: "environment-local",
+          projectId: "project-1",
+          branch: "windows-draft",
+          worktreePath: "/repo/windows-worktree",
+          envMode: "worktree",
+        },
+      }),
+    ).toEqual({
+      envMode: "local",
     });
   });
 });

@@ -104,9 +104,7 @@ function readPersistedState(): UiState {
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
-      threadLastVisitedAtById: sanitizePersistedThreadLastVisitedAt(
-        parsed.threadLastVisitedAtById,
-      ),
+      threadLastVisitedAtById: sanitizePersistedThreadLastVisitedAt(parsed.threadLastVisitedAtById),
     };
   } catch {
     return initialState;

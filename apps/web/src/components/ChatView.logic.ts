@@ -9,7 +9,13 @@ import {
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
-import { type ChatMessage, type SessionPhase, type Thread, type ThreadSession } from "../types";
+import {
+  type ChatMessage,
+  type SessionPhase,
+  type SidebarThreadSummary,
+  type Thread,
+  type ThreadSession,
+} from "../types";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
 import { selectThreadByRef, useStore } from "../store";
@@ -256,6 +262,50 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
 
 export function threadHasConversationContent(thread: Thread | null | undefined): boolean {
   return Boolean(thread && (thread.latestTurn !== null || thread.messages.length > 0));
+}
+
+export function sidebarThreadHasConversationContent(
+  thread: SidebarThreadSummary | null | undefined,
+): boolean {
+  return Boolean(
+    thread &&
+    (thread.latestTurn !== null ||
+      (thread.latestUserMessageAt !== null && thread.latestUserMessageAt !== undefined)),
+  );
+}
+
+export function promotedDraftThreadMatchesRef(
+  draftThread: Pick<DraftThreadState, "promotedTo"> | null | undefined,
+  threadRef: ScopedThreadRef | null | undefined,
+): boolean {
+  return Boolean(
+    threadRef &&
+    draftThread?.promotedTo &&
+    draftThread.promotedTo.environmentId === threadRef.environmentId &&
+    draftThread.promotedTo.threadId === threadRef.threadId,
+  );
+}
+
+export function shouldDeleteAbandonedPromotedDraftThread(input: {
+  draftThread: Pick<DraftThreadState, "promotedTo"> | null | undefined;
+  threadRef: ScopedThreadRef | null | undefined;
+  serverThread: Thread | null | undefined;
+  sidebarThread?: SidebarThreadSummary | null | undefined;
+  hasLocalDispatch?: boolean | undefined;
+}): boolean {
+  if (!promotedDraftThreadMatchesRef(input.draftThread, input.threadRef)) {
+    return false;
+  }
+  if (input.hasLocalDispatch) {
+    return false;
+  }
+  if (threadHasConversationContent(input.serverThread)) {
+    return false;
+  }
+  if (sidebarThreadHasConversationContent(input.sidebarThread)) {
+    return false;
+  }
+  return true;
 }
 
 // `threadProvider` is the open branded driver kind carried by the session.

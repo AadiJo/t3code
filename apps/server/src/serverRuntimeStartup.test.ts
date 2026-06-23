@@ -27,10 +27,31 @@ import {
   getAutoBootstrapDefaultModelSelection,
   launchStartupHeartbeat,
   makeCommandGate,
+  reapStalePrewarmedThreads,
   resolveAutoBootstrapWelcomeTargets,
   resolveWelcomeBase,
   ServerRuntimeStartupError,
+  shouldReapStalePrewarmedThread,
 } from "./serverRuntimeStartup.ts";
+
+function makeShellThread(
+  overrides: Partial<Parameters<typeof shouldReapStalePrewarmedThread>[0]> = {},
+) {
+  return {
+    latestTurn: null,
+    latestUserMessageAt: null,
+    session: {
+      threadId: ThreadId.make("thread-shell"),
+      status: "ready" as const,
+      providerName: "codex",
+      runtimeMode: "full-access" as const,
+      activeTurnId: null,
+      lastError: null,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    ...overrides,
+  };
+}
 
 it("uses the canonical Codex default for auto-bootstrapped model selection", () => {
   assert.deepStrictEqual(getAutoBootstrapDefaultModelSelection(), {
@@ -133,6 +154,132 @@ it.effect("resolveWelcomeBase derives cwd and project name from server config", 
       projectName: "startup-project",
     });
   }),
+);
+
+it("identifies empty session-only threads as stale prewarmed threads", () => {
+  assert.strictEqual(shouldReapStalePrewarmedThread(makeShellThread()), true);
+  assert.strictEqual(
+    shouldReapStalePrewarmedThread(
+      makeShellThread({
+        latestUserMessageAt: "2026-01-01T00:01:00.000Z",
+      }),
+    ),
+    false,
+  );
+  assert.strictEqual(
+    shouldReapStalePrewarmedThread(
+      makeShellThread({
+        latestTurn: {
+          turnId: "turn-1" as never,
+          state: "completed",
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          completedAt: "2026-01-01T00:01:00.000Z",
+          assistantMessageId: null,
+        },
+      }),
+    ),
+    false,
+  );
+  assert.strictEqual(
+    shouldReapStalePrewarmedThread(
+      makeShellThread({
+        session: null,
+      }),
+    ),
+    false,
+  );
+});
+
+it.effect("reapStalePrewarmedThreads deletes only empty session-only threads", () =>
+  Effect.gen(function* () {
+    const dispatchedThreadIds = yield* Ref.make<ReadonlyArray<ThreadId>>([]);
+
+    const reapedCount = yield* reapStalePrewarmedThreads.pipe(
+      Effect.provideService(ProjectionSnapshotQuery, {
+        getCommandReadModel: () => Effect.die("unused"),
+        getSnapshot: () => Effect.die("unused"),
+        getShellSnapshot: () =>
+          Effect.succeed({
+            snapshotSequence: 1,
+            projects: [],
+            threads: [
+              {
+                id: ThreadId.make("thread-stale"),
+                projectId: ProjectId.make("project-1"),
+                title: "New thread",
+                modelSelection: getAutoBootstrapDefaultModelSelection(),
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                latestTurn: null,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                archivedAt: null,
+                session: makeShellThread().session,
+                goal: null,
+                latestUserMessageAt: null,
+                hasPendingApprovals: false,
+                hasPendingUserInput: false,
+                hasActionableProposedPlan: false,
+              },
+              {
+                id: ThreadId.make("thread-keep"),
+                projectId: ProjectId.make("project-1"),
+                title: "Keep thread",
+                modelSelection: getAutoBootstrapDefaultModelSelection(),
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                latestTurn: null,
+                createdAt: "2026-01-01T00:00:00.000Z",
+                updatedAt: "2026-01-01T00:00:00.000Z",
+                archivedAt: null,
+                session: null,
+                goal: null,
+                latestUserMessageAt: null,
+                hasPendingApprovals: false,
+                hasPendingUserInput: false,
+                hasActionableProposedPlan: false,
+              },
+            ],
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          }),
+        getArchivedShellSnapshot: () => Effect.die("unused"),
+        getSnapshotSequence: () => Effect.die("unused"),
+        getCounts: () => Effect.die("unused"),
+        getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+        getProjectShellById: () => Effect.succeed(Option.none()),
+        getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
+        getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+        getFullThreadDiffContext: () => Effect.succeed(Option.none()),
+        getThreadShellById: () => Effect.succeed(Option.none()),
+        getThreadDetailById: () => Effect.succeed(Option.none()),
+      }),
+      Effect.provideService(OrchestrationEngineService, {
+        readEvents: () => Stream.empty,
+        dispatch: (command) => {
+          if (command.type !== "thread.delete") {
+            return Effect.die(`unexpected command: ${command.type}`);
+          }
+          return Ref.update(dispatchedThreadIds, (threadIds) => [
+            ...threadIds,
+            command.threadId,
+          ]).pipe(Effect.as({ sequence: 1 }));
+        },
+        streamDomainEvents: Stream.empty,
+      } satisfies OrchestrationEngineShape),
+      Effect.provideService(Crypto.Crypto, {
+        ...(yield* Crypto.Crypto),
+        randomUUIDv4: Effect.succeed("cmd-reap-stale-thread"),
+      }),
+    );
+
+    assert.equal(reapedCount, 1);
+    assert.deepStrictEqual(yield* Ref.get(dispatchedThreadIds), [ThreadId.make("thread-stale")]);
+  }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("resolveAutoBootstrapWelcomeTargets returns existing project and thread ids", () => {

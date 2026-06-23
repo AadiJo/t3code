@@ -1799,21 +1799,28 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ? (draftStore.getDraftSession(currentRouteTarget.draftId) ?? null)
             : null;
       const seedContext = resolveSidebarNewThreadSeedContext({
+        environmentId: member.environmentId,
         projectId: member.id,
         defaultEnvMode: resolveSidebarNewThreadEnvMode({
           defaultEnvMode: defaultThreadEnvMode,
         }),
         activeThread:
-          currentActiveThread && currentActiveThread.projectId === member.id
+          currentActiveThread &&
+          currentActiveThread.environmentId === member.environmentId &&
+          currentActiveThread.projectId === member.id
             ? {
+                environmentId: currentActiveThread.environmentId,
                 projectId: currentActiveThread.projectId,
                 branch: currentActiveThread.branch,
                 worktreePath: currentActiveThread.worktreePath,
               }
             : null,
         activeDraftThread:
-          currentActiveDraftThread && currentActiveDraftThread.projectId === member.id
+          currentActiveDraftThread &&
+          currentActiveDraftThread.environmentId === member.environmentId &&
+          currentActiveDraftThread.projectId === member.id
             ? {
+                environmentId: currentActiveDraftThread.environmentId,
                 projectId: currentActiveDraftThread.projectId,
                 branch: currentActiveDraftThread.branch,
                 worktreePath: currentActiveDraftThread.worktreePath,

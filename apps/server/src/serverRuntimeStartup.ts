@@ -3,6 +3,7 @@ import {
   DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER_INTERACTION_MODE,
+  type OrchestrationThreadShell,
   type ModelSelection,
   ProjectId,
   ProviderInstanceId,
@@ -244,6 +245,46 @@ export const resolveAutoBootstrapWelcomeTargets = Effect.gen(function* () {
   } as const;
 });
 
+export function shouldReapStalePrewarmedThread(
+  thread: Pick<OrchestrationThreadShell, "latestTurn" | "latestUserMessageAt" | "session">,
+): boolean {
+  return (
+    thread.latestUserMessageAt === null &&
+    thread.latestTurn === null &&
+    thread.session !== null &&
+    thread.session.activeTurnId === null
+  );
+}
+
+export const reapStalePrewarmedThreads = Effect.gen(function* () {
+  const crypto = yield* Crypto.Crypto;
+  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+  const orchestrationEngine = yield* OrchestrationEngineService;
+  const randomUUID = crypto.randomUUIDv4;
+
+  const snapshot = yield* projectionSnapshotQuery.getShellSnapshot();
+  const staleThreadIds = snapshot.threads
+    .filter(shouldReapStalePrewarmedThread)
+    .map((thread) => thread.id);
+
+  for (const threadId of staleThreadIds) {
+    yield* orchestrationEngine.dispatch({
+      type: "thread.delete",
+      commandId: CommandId.make(yield* randomUUID),
+      threadId,
+    });
+  }
+
+  if (staleThreadIds.length > 0) {
+    yield* Effect.logInfo("startup stale prewarmed threads reaped", {
+      reapedCount: staleThreadIds.length,
+      threadIds: staleThreadIds,
+    });
+  }
+
+  return staleThreadIds.length;
+});
+
 const resolveStartupBrowserTarget = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
@@ -337,6 +378,18 @@ export const makeServerRuntimeStartup = Effect.gen(function* () {
         yield* orchestrationReactor.start().pipe(Scope.provide(reactorScope));
         yield* providerSessionReaper.start().pipe(Scope.provide(reactorScope));
       }),
+    );
+
+    yield* Effect.logDebug("startup phase: reaping stale prewarmed threads");
+    yield* runStartupPhase(
+      "threads.reap-stale-prewarmed",
+      reapStalePrewarmedThreads.pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("startup stale prewarmed thread reap failed", {
+            cause,
+          }),
+        ),
+      ),
     );
 
     const welcomeBase = yield* resolveWelcomeBase;

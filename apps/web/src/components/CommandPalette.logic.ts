@@ -122,7 +122,7 @@ export type BuildThreadActionItemsThread = Pick<
 export function buildThreadActionItems<TThread extends BuildThreadActionItemsThread>(input: {
   threads: ReadonlyArray<TThread>;
   activeThreadId?: Thread["id"];
-  projectTitleById: ReadonlyMap<Project["id"], string>;
+  resolveProjectTitle: (thread: TThread) => string | undefined;
   sortOrder: SidebarThreadSortOrder;
   icon: ReactNode;
   /** Optional content rendered inline before the title text per-thread. */
@@ -140,7 +140,7 @@ export function buildThreadActionItems<TThread extends BuildThreadActionItemsThr
     input.limit === undefined ? sortedThreads : sortedThreads.slice(0, input.limit);
 
   return visibleThreads.map((thread) => {
-    const projectTitle = input.projectTitleById.get(thread.projectId);
+    const projectTitle = input.resolveProjectTitle(thread);
     const descriptionParts: string[] = [];
 
     if (projectTitle) {

@@ -404,11 +404,6 @@ label:has(> select#reasoning-effort) select {
   height: 100%;
 }
 
-.cad-fullscreen-active .scroll-to-bottom-control {
-  z-index: 0;
-  display: none;
-}
-
 .scroll-to-bottom-control > button {
   animation: scroll-to-bottom-control-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }

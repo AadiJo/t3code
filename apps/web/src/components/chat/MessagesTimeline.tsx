@@ -171,6 +171,7 @@ interface MessagesTimelineProps {
   workspaceRoot: string | undefined;
   skills?: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   onIsAtEndChange: (isAtEnd: boolean) => void;
+  stickToBottomRequestId?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +200,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   workspaceRoot,
   skills = EMPTY_TIMELINE_SKILLS,
   onIsAtEndChange,
+  stickToBottomRequestId = 0,
 }: MessagesTimelineProps) {
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
   const [stickToBottomEnabled, setStickToBottomEnabled] = useState(true);
@@ -336,6 +338,35 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   useEffect(() => {
     syncStickToBottomEnabled(true);
   }, [routeThreadKey, syncStickToBottomEnabled]);
+
+  useEffect(() => {
+    if (stickToBottomRequestId === 0) {
+      return;
+    }
+
+    syncStickToBottomEnabled(true);
+    onIsAtEndChange(true);
+
+    let firstFrameId: number | null = null;
+    let secondFrameId: number | null = null;
+    firstFrameId = window.requestAnimationFrame(() => {
+      firstFrameId = null;
+      void listRef.current?.scrollToEnd?.({ animated: false });
+      secondFrameId = window.requestAnimationFrame(() => {
+        secondFrameId = null;
+        void listRef.current?.scrollToEnd?.({ animated: false });
+      });
+    });
+
+    return () => {
+      if (firstFrameId !== null) {
+        window.cancelAnimationFrame(firstFrameId);
+      }
+      if (secondFrameId !== null) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [listRef, onIsAtEndChange, stickToBottomRequestId, syncStickToBottomEnabled]);
 
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({

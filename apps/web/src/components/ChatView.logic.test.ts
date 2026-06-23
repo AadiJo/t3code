@@ -23,6 +23,7 @@ import {
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
   resolveSendEnvMode,
+  shouldDeleteAbandonedPromotedDraftThread,
   shouldWriteThreadErrorToCurrentServerThread,
   waitForStartedServerThread,
 } from "./ChatView.logic";
@@ -399,6 +400,89 @@ describe("shouldWriteThreadErrorToCurrentServerThread", () => {
         serverThread: undefined,
         routeThreadRef: scopeThreadRef(localEnvironmentId, threadId),
         targetThreadId: threadId,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldDeleteAbandonedPromotedDraftThread", () => {
+  it("allows cleanup for a matching promoted draft with no conversation content", () => {
+    const threadId = ThreadId.make("thread-empty");
+    const threadRef = scopeThreadRef(localEnvironmentId, threadId);
+
+    expect(
+      shouldDeleteAbandonedPromotedDraftThread({
+        draftThread: { promotedTo: threadRef },
+        threadRef,
+        serverThread: makeThread({ id: threadId }),
+      }),
+    ).toBe(true);
+  });
+
+  it("does not cleanup while a local send dispatch is in flight", () => {
+    const threadId = ThreadId.make("thread-local-dispatch");
+    const threadRef = scopeThreadRef(localEnvironmentId, threadId);
+
+    expect(
+      shouldDeleteAbandonedPromotedDraftThread({
+        draftThread: { promotedTo: threadRef },
+        threadRef,
+        serverThread: makeThread({ id: threadId }),
+        hasLocalDispatch: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not cleanup after the server thread has a latest turn", () => {
+    const threadId = ThreadId.make("thread-started");
+    const threadRef = scopeThreadRef(localEnvironmentId, threadId);
+
+    expect(
+      shouldDeleteAbandonedPromotedDraftThread({
+        draftThread: { promotedTo: threadRef },
+        threadRef,
+        serverThread: makeThread({
+          id: threadId,
+          latestTurn: {
+            turnId: TurnId.make("turn-started"),
+            state: "running",
+            requestedAt: "2026-03-29T00:01:00.000Z",
+            startedAt: "2026-03-29T00:01:01.000Z",
+            completedAt: null,
+          },
+        }),
+      }),
+    ).toBe(false);
+  });
+
+  it("does not cleanup when the sidebar shell has seen conversation content first", () => {
+    const threadId = ThreadId.make("thread-sidebar-started");
+    const threadRef = scopeThreadRef(localEnvironmentId, threadId);
+
+    expect(
+      shouldDeleteAbandonedPromotedDraftThread({
+        draftThread: { promotedTo: threadRef },
+        threadRef,
+        serverThread: makeThread({ id: threadId }),
+        sidebarThread: {
+          id: threadId,
+          environmentId: localEnvironmentId,
+          projectId: ProjectId.make("project-1"),
+          title: "Thread",
+          interactionMode: "default",
+          session: null,
+          createdAt: "2026-03-29T00:00:00.000Z",
+          archivedAt: null,
+          updatedAt: "2026-03-29T00:01:00.000Z",
+          latestTurn: null,
+          branch: null,
+          worktreePath: null,
+          latestUserMessageAt: "2026-03-29T00:01:00.000Z",
+          hasPendingApprovals: false,
+          hasPendingUserInput: false,
+          hasActionableProposedPlan: false,
+          goal: null,
+        },
       }),
     ).toBe(false);
   });

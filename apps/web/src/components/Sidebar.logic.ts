@@ -188,9 +188,6 @@ export function shouldHideInactiveEmptyPromotedDraftThread(input: {
   if (input.thread.latestUserMessageAt != null || input.thread.latestTurn !== null) {
     return false;
   }
-  if (input.thread.session !== null && input.thread.session.status !== "closed") {
-    return false;
-  }
 
   return Object.values(input.draftThreadsByThreadKey).some((draftThread) => {
     const promotedTo = draftThread.promotedTo;
@@ -220,14 +217,17 @@ export function resolveSidebarNewThreadEnvMode(input: {
 }
 
 export function resolveSidebarNewThreadSeedContext(input: {
+  environmentId: string;
   projectId: string;
   defaultEnvMode: SidebarNewThreadEnvMode;
   activeThread?: {
+    environmentId: string;
     projectId: string;
     branch: string | null;
     worktreePath: string | null;
   } | null;
   activeDraftThread?: {
+    environmentId: string;
     projectId: string;
     branch: string | null;
     worktreePath: string | null;
@@ -244,7 +244,10 @@ export function resolveSidebarNewThreadSeedContext(input: {
     };
   }
 
-  if (input.activeDraftThread?.projectId === input.projectId) {
+  if (
+    input.activeDraftThread?.environmentId === input.environmentId &&
+    input.activeDraftThread.projectId === input.projectId
+  ) {
     return {
       branch: input.activeDraftThread.branch,
       worktreePath: input.activeDraftThread.worktreePath,
@@ -252,7 +255,10 @@ export function resolveSidebarNewThreadSeedContext(input: {
     };
   }
 
-  if (input.activeThread?.projectId === input.projectId) {
+  if (
+    input.activeThread?.environmentId === input.environmentId &&
+    input.activeThread.projectId === input.projectId
+  ) {
     return {
       branch: input.activeThread.branch,
       worktreePath: input.activeThread.worktreePath,

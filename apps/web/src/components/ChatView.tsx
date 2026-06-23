@@ -1215,6 +1215,7 @@ function ChatViewContent(props: ChatViewProps) {
   const composerRef = useComposerHandleContext() ?? localComposerRef;
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [renderScrollToBottom, setRenderScrollToBottom] = useState(false);
+  const [stickToBottomRequestId, setStickToBottomRequestId] = useState(0);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
@@ -3415,6 +3416,13 @@ function ChatViewContent(props: ChatViewProps) {
       { wait: 150 },
     ),
   );
+  const requestStickToBottom = useCallback(async (animated = false) => {
+    isAtEndRef.current = true;
+    showScrollDebouncer.current.cancel();
+    setShowScrollToBottom(false);
+    setStickToBottomRequestId((requestId) => requestId + 1);
+    await legendListRef.current?.scrollToEnd?.({ animated });
+  }, []);
   const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
     if (isAtEndRef.current === isAtEnd) return;
     isAtEndRef.current = isAtEnd;
@@ -4244,13 +4252,9 @@ function ChatViewContent(props: ChatViewProps) {
       sizeBytes: image.sizeBytes,
       previewUrl: image.previewUrl,
     }));
-    // Scroll to the current end *before* adding the optimistic message.
-    // This sets LegendList's internal isAtEnd=true so maintainScrollAtEnd
-    // automatically pins to the new item when the data changes.
-    isAtEndRef.current = true;
-    showScrollDebouncer.current.cancel();
-    setShowScrollToBottom(false);
-    await legendListRef.current?.scrollToEnd?.({ animated: false });
+    // Sending opts back into following the active turn, even if the user was
+    // previously reading above the bottom.
+    await requestStickToBottom(false);
 
     setOptimisticUserMessages((existing) => [
       ...existing,
@@ -4705,11 +4709,9 @@ function ChatViewContent(props: ChatViewProps) {
       beginLocalDispatch({ preparingWorktree: false });
       setThreadError(threadIdForSend, null);
 
-      // Scroll to the current end *before* adding the optimistic message.
-      isAtEndRef.current = true;
-      showScrollDebouncer.current.cancel();
-      setShowScrollToBottom(false);
-      await legendListRef.current?.scrollToEnd?.({ animated: false });
+      // Sending opts back into following the active turn, even if the user was
+      // previously reading above the bottom.
+      await requestStickToBottom(false);
 
       setOptimisticUserMessages((existing) => [
         ...existing,
@@ -4793,6 +4795,7 @@ function ChatViewContent(props: ChatViewProps) {
       isSendBusy,
       isServerThread,
       persistThreadSettingsForNextTurn,
+      requestStickToBottom,
       resetLocalDispatch,
       runtimeMode,
       setComposerDraftInteractionMode,
@@ -5288,6 +5291,7 @@ function ChatViewContent(props: ChatViewProps) {
                   turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
                   activeThreadEnvironmentId={activeThread.environmentId}
                   routeThreadKey={routeThreadKey}
+                  stickToBottomRequestId={stickToBottomRequestId}
                   onOpenTurnDiff={onOpenTurnDiff}
                   revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
                   onRevertUserMessage={onRevertUserMessage}
@@ -5304,7 +5308,7 @@ function ChatViewContent(props: ChatViewProps) {
                 {/* scroll to bottom pill — shown when user has scrolled away from the bottom */}
                 {renderScrollToBottom && (
                   <div
-                    className="scroll-to-bottom-control pointer-events-none absolute bottom-1 left-1/2 z-30 flex -translate-x-1/2 justify-center py-1.5"
+                    className="scroll-to-bottom-control pointer-events-none absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 justify-center py-1.5 sm:bottom-4"
                     data-state={showScrollToBottom ? "entering" : "exiting"}
                   >
                     <button

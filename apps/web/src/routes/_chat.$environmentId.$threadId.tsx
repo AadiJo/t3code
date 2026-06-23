@@ -7,15 +7,18 @@ import {
   useComposerDraftStore,
   type DraftThreadState,
 } from "../composerDraftStore";
+import { shouldDeleteAbandonedPromotedDraftThread } from "../components/ChatView.logic";
 import { type DiffRouteSearch, parseDiffRouteSearch } from "../diffRouteSearch";
 import { readEnvironmentApi } from "../environmentApi";
 import { newCommandId } from "../lib/utils";
 import {
   selectEnvironmentState,
   selectSidebarThreadSummaryByRef,
+  selectThreadByRef,
   selectThreadExistsByRef,
   useStore,
 } from "../store";
+import { selectLocalDispatchSnapshot, useLocalDispatchStore } from "../localDispatchStore";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { resolveThreadRouteRef } from "../threadRoutes";
 import { SidebarInset } from "~/components/ui/sidebar";
@@ -101,13 +104,25 @@ function ChatThreadRouteView() {
         draftThread: latestDraftThread,
         serverThread: latestServerThread,
       } = cleanupStateRef.current;
+      if (!latestThreadRef || !latestDraftThread || !latestServerThread) {
+        return;
+      }
+
+      const latestState = useStore.getState();
+      const currentServerThread = selectThreadByRef(latestState, latestThreadRef);
+      const currentSidebarThread = selectSidebarThreadSummaryByRef(latestState, latestThreadRef);
+      const currentLocalDispatch = selectLocalDispatchSnapshot(
+        useLocalDispatchStore.getState().byThreadKey,
+        latestThreadRef,
+      );
       if (
-        !latestThreadRef ||
-        !latestDraftThread?.promotedTo ||
-        !latestServerThread ||
-        latestServerThread.messages.length > 0 ||
-        latestDraftThread.promotedTo.environmentId !== latestThreadRef.environmentId ||
-        latestDraftThread.promotedTo.threadId !== latestThreadRef.threadId
+        !shouldDeleteAbandonedPromotedDraftThread({
+          draftThread: latestDraftThread,
+          threadRef: latestThreadRef,
+          serverThread: currentServerThread ?? latestServerThread,
+          sidebarThread: currentSidebarThread,
+          hasLocalDispatch: currentLocalDispatch !== null,
+        })
       ) {
         return;
       }

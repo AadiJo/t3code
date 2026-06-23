@@ -1,11 +1,10 @@
 "use client";
 
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
+import { scopedProjectKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
 import {
   DEFAULT_MODEL,
   type EnvironmentId,
   type FilesystemBrowseResult,
-  type ProjectId,
   ProviderInstanceId,
   type SourceControlDiscoveryResult,
   type SourceControlProviderKind,
@@ -48,6 +47,7 @@ import {
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useSettings } from "../hooks/useSettings";
 import { readLocalApi } from "../localApi";
+import { resolveProjectPathTarget } from "../projectPathTargets";
 import {
   getSourceControlDiscoverySnapshot,
   refreshSourceControlDiscovery,
@@ -81,7 +81,6 @@ import {
 } from "../store";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { buildThreadRouteParams, resolveThreadRouteTarget } from "../threadRoutes";
-import { parseWslUncPath, type WslUncPath } from "../wslPaths";
 import {
   ADDON_ICON_CLASS,
   buildBrowseGroups,
@@ -146,18 +145,10 @@ function getEnvironmentBrowsePlatform(os: string | null | undefined): string {
   return typeof navigator === "undefined" ? "" : navigator.platform;
 }
 
-function isDesktopLocalWslInstance(instanceId: string | undefined): boolean {
-  return instanceId?.startsWith("wsl:") === true;
-}
-
 interface AddProjectEnvironmentOption {
   readonly environmentId: EnvironmentId;
   readonly label: string;
   readonly isPrimary: boolean;
-}
-
-interface WslProjectSelection extends WslUncPath {
-  readonly environmentId: EnvironmentId;
 }
 
 type AddProjectRemoteProviderKind = Extract<
@@ -516,12 +507,24 @@ function OpenCommandPaletteDialog() {
     [primaryEnvironmentId, savedEnvironmentRuntimeById, settings],
   );
 
-  const projectCwdById = useMemo(
-    () => new Map<ProjectId, string>(projects.map((project) => [project.id, project.cwd])),
+  const projectCwdByScopedRef = useMemo(
+    () =>
+      new Map<string, string>(
+        projects.map((project) => [
+          scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
+          project.cwd,
+        ]),
+      ),
     [projects],
   );
-  const projectTitleById = useMemo(
-    () => new Map<ProjectId, string>(projects.map((project) => [project.id, project.name])),
+  const projectTitleByScopedRef = useMemo(
+    () =>
+      new Map<string, string>(
+        projects.map((project) => [
+          scopedProjectKey(scopeProjectRef(project.environmentId, project.id)),
+          project.name,
+        ]),
+      ),
     [projects],
   );
 
@@ -529,8 +532,14 @@ function OpenCommandPaletteDialog() {
   const currentProjectEnvironmentId =
     activeThread?.environmentId ?? activeDraftThread?.environmentId ?? null;
   const currentProjectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? null;
+  const currentProjectRefKey =
+    currentProjectEnvironmentId && currentProjectId
+      ? scopedProjectKey(scopeProjectRef(currentProjectEnvironmentId, currentProjectId))
+      : null;
   const currentProjectCwd = currentProjectId
-    ? (projectCwdById.get(currentProjectId) ?? null)
+    ? currentProjectRefKey
+      ? (projectCwdByScopedRef.get(currentProjectRefKey) ?? null)
+      : null
     : null;
   const currentProjectCwdForBrowse =
     browseEnvironmentId && currentProjectEnvironmentId === browseEnvironmentId
@@ -592,24 +601,30 @@ function OpenCommandPaletteDialog() {
     [browseEnvironmentId, currentProjectCwdForBrowse, fetchBrowseResult, queryClient],
   );
 
-  const resolveWslUncProjectSelection = useCallback(
-    (path: string): WslProjectSelection | null => {
-      const parsed = parseWslUncPath(path);
-      if (!parsed) {
-        return null;
-      }
-
-      const wslRecords = Object.values(savedEnvironmentRegistry).filter((record) =>
-        isDesktopLocalWslInstance(record.desktopLocal?.instanceId),
-      );
-      const exactRecord = wslRecords.find(
-        (record) =>
-          record.desktopLocal?.instanceId.toLowerCase() === `wsl:${parsed.distro}`.toLowerCase(),
-      );
-      const record = exactRecord ?? (wslRecords.length === 1 ? wslRecords[0] : null);
-      return record ? { ...parsed, environmentId: record.environmentId } : null;
-    },
-    [savedEnvironmentRegistry],
+  const resolveInputProjectPathTarget = useCallback(
+    (rawCwd: string) =>
+      resolveProjectPathTarget({
+        rawCwd,
+        fallbackTarget:
+          browseEnvironmentId === null
+            ? null
+            : {
+                environmentId: browseEnvironmentId,
+                rawCwd,
+                platform: browseEnvironmentPlatform,
+                currentProjectCwd: currentProjectCwdForBrowse,
+              },
+        desktopLocalTargets: Object.values(savedEnvironmentRegistry).map((record) => ({
+          environmentId: record.environmentId,
+          instanceId: record.desktopLocal?.instanceId,
+        })),
+      }),
+    [
+      browseEnvironmentId,
+      browseEnvironmentPlatform,
+      currentProjectCwdForBrowse,
+      savedEnvironmentRegistry,
+    ],
   );
 
   // Prefetch only the parent (for back-navigation). Prefetching the
@@ -712,7 +727,10 @@ function OpenCommandPaletteDialog() {
       buildThreadActionItems({
         threads,
         ...(activeThreadId ? { activeThreadId } : {}),
-        projectTitleById,
+        resolveProjectTitle: (thread) =>
+          projectTitleByScopedRef.get(
+            scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+          ),
         sortOrder: settings.sidebarThreadSortOrder,
         icon: <MessageSquareIcon className={ITEM_ICON_CLASS} />,
         renderLeadingContent: (thread) => <ThreadRowLeadingStatus thread={thread} />,
@@ -724,7 +742,7 @@ function OpenCommandPaletteDialog() {
           });
         },
       }),
-    [activeThreadId, navigate, projectTitleById, settings.sidebarThreadSortOrder, threads],
+    [activeThreadId, navigate, projectTitleByScopedRef, settings.sidebarThreadSortOrder, threads],
   );
   const recentThreadItems = allThreadItems.slice(0, RECENT_THREAD_LIMIT);
 
@@ -999,7 +1017,9 @@ function OpenCommandPaletteDialog() {
 
   if (projects.length > 0) {
     const activeProjectTitle = currentProjectId
-      ? (projectTitleById.get(currentProjectId) ?? null)
+      ? currentProjectRefKey
+        ? (projectTitleByScopedRef.get(currentProjectRefKey) ?? null)
+        : null
       : null;
 
     if (activeProjectTitle) {
@@ -1191,20 +1211,20 @@ function OpenCommandPaletteDialog() {
 
   const handleAddProject = useCallback(
     async (rawCwd: string) => {
-      if (!browseEnvironmentId) return;
-      await handleAddProjectForEnvironment({
-        environmentId: browseEnvironmentId,
-        rawCwd,
-        platform: browseEnvironmentPlatform,
-        currentProjectCwd: currentProjectCwdForBrowse,
-      });
+      const resolvedTarget = resolveInputProjectPathTarget(rawCwd);
+      if (!resolvedTarget.ok) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to add project",
+            description: resolvedTarget.error,
+          }),
+        );
+        return;
+      }
+      await handleAddProjectForEnvironment(resolvedTarget.target);
     },
-    [
-      browseEnvironmentId,
-      browseEnvironmentPlatform,
-      currentProjectCwdForBrowse,
-      handleAddProjectForEnvironment,
-    ],
+    [handleAddProjectForEnvironment, resolveInputProjectPathTarget],
   );
 
   function getDefaultCloneParentPath(environmentId: EnvironmentId): string {
@@ -1216,19 +1236,19 @@ function OpenCommandPaletteDialog() {
       return;
     }
 
-    const api = readEnvironmentApi(addProjectCloneFlow.environmentId);
-    if (!api) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Unable to clone project",
-          description: "Environment API is not available.",
-        }),
-      );
-      return;
-    }
-
     if (addProjectCloneFlow.step === "repository") {
+      const api = readEnvironmentApi(addProjectCloneFlow.environmentId);
+      if (!api) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Unable to clone project",
+            description: "Environment API is not available.",
+          }),
+        );
+        return;
+      }
+
       const rawRepository = query.trim();
       if (rawRepository.length === 0 || isRemoteProjectLookingUp) {
         return;
@@ -1288,7 +1308,32 @@ function OpenCommandPaletteDialog() {
       return;
     }
 
-    if (isUnsupportedWindowsProjectPath(rawDestination, browseEnvironmentPlatform)) {
+    const resolvedTarget = resolveInputProjectPathTarget(rawDestination);
+    if (!resolvedTarget.ok) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Clone failed",
+          description: resolvedTarget.error,
+        }),
+      );
+      return;
+    }
+
+    const { target } = resolvedTarget;
+    const api = readEnvironmentApi(target.environmentId);
+    if (!api) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Clone failed",
+          description: "Environment API is not available.",
+        }),
+      );
+      return;
+    }
+
+    if (isUnsupportedWindowsProjectPath(target.rawCwd, target.platform)) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
@@ -1299,7 +1344,7 @@ function OpenCommandPaletteDialog() {
       return;
     }
 
-    if (isExplicitRelativeProjectPath(rawDestination) && !currentProjectCwdForBrowse) {
+    if (isExplicitRelativeProjectPath(target.rawCwd) && !target.currentProjectCwd) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
@@ -1310,10 +1355,7 @@ function OpenCommandPaletteDialog() {
       return;
     }
 
-    const destinationPath = resolveProjectPathForDispatch(
-      rawDestination,
-      currentProjectCwdForBrowse,
-    );
+    const destinationPath = resolveProjectPathForDispatch(target.rawCwd, target.currentProjectCwd);
     if (destinationPath.length === 0) {
       return;
     }
@@ -1324,7 +1366,12 @@ function OpenCommandPaletteDialog() {
         remoteUrl: addProjectCloneFlow.remoteUrl,
         destinationPath,
       });
-      await handleAddProject(result.cwd);
+      await handleAddProjectForEnvironment({
+        environmentId: target.environmentId,
+        rawCwd: result.cwd,
+        platform: target.platform,
+        currentProjectCwd: target.currentProjectCwd,
+      });
     } catch (error) {
       toastManager.add(
         stackedThreadToast({
@@ -1567,37 +1614,14 @@ function OpenCommandPaletteDialog() {
     if (!pickedPath) {
       return;
     }
-    const pickedWslPath = parseWslUncPath(pickedPath);
-    if (pickedWslPath) {
-      const wslSelection = resolveWslUncProjectSelection(pickedPath);
-      if (!wslSelection) {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Could not add WSL project",
-            description: "Start the WSL backend, then choose the folder again.",
-          }),
-        );
-        return;
-      }
-      await handleAddProjectForEnvironment({
-        environmentId: wslSelection.environmentId,
-        rawCwd: wslSelection.linuxPath,
-        platform: "Linux",
-        currentProjectCwd: null,
-      });
-      return;
-    }
     await handleAddProject(pickedPath);
   }, [
     browseEnvironmentId,
     canOpenProjectFromFileManager,
     fileManagerInitialPath,
     handleAddProject,
-    handleAddProjectForEnvironment,
     isPickingProjectFolder,
     primaryEnvironmentId,
-    resolveWslUncProjectSelection,
   ]);
 
   return (
