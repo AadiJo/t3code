@@ -7,7 +7,8 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Types from "effect/Types";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import * as CodexClient from "effect-codex-app-server/client";
 import * as CodexSchema from "effect-codex-app-server/schema";
 import * as CodexErrors from "effect-codex-app-server/errors";
@@ -35,9 +36,6 @@ import packageJson from "../../../package.json" with { type: "json" };
 const isCodexAppServerSpawnError = Schema.is(CodexErrors.CodexAppServerSpawnError);
 
 const CODEX_APP_SERVER_PROBE_FORCE_KILL_AFTER = "2 seconds" as const;
-export const T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV = "T3CODE_CODEX_SKILL_EXTRA_ROOTS";
-const CodexSkillExtraRootsEnvSchema = Schema.fromJsonString(Schema.Array(Schema.String));
-const decodeCodexSkillExtraRootsEnv = Schema.decodeUnknownOption(CodexSkillExtraRootsEnvSchema);
 
 const CODEX_PRESENTATION = {
   displayName: "Codex",
@@ -255,60 +253,8 @@ function parseCodexSkillsListResponse(
   });
 }
 
-export function parseCodexSkillExtraRootsEnv(value: string | undefined): string[] {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return [];
-  }
-
-  const parsed = decodeCodexSkillExtraRootsEnv(trimmed);
-  if (Option.isSome(parsed)) {
-    return parsed.value.filter((entry) => entry.trim().length > 0);
-  }
-
-  return trimmed
-    .split(/[;\n]/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-}
-
-export function resolveCodexSkillExtraRoots(
-  resolvedHomePath: string | undefined,
-  extraRootsEnv = process.env[T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV],
-): string[] {
-  const codexHome = resolvedHomePath ?? expandHomePath("~/.codex");
-  const separator = codexHome.includes("\\") ? "\\" : "/";
-  const roots = [
-    `${codexHome.replace(/[\\/]+$/, "")}${separator}skills`,
-    ...parseCodexSkillExtraRootsEnv(extraRootsEnv),
-  ];
-  return Array.from(new Set(roots));
-}
-
-export const configureCodexSkillExtraRoots = Effect.fn("configureCodexSkillExtraRoots")(function* (
-  client: CodexClient.CodexAppServerClientShape,
-  extraRoots: ReadonlyArray<string>,
-) {
-  if (extraRoots.length === 0) {
-    return;
-  }
-
-  yield* client
-    .request("skills/extraRoots/set", {
-      extraRoots,
-    })
-    .pipe(
-      Effect.catch((error) =>
-        Effect.logDebug("Codex app-server rejected skill extra roots; continuing with defaults", {
-          error: error.message,
-          roots: extraRoots,
-        }),
-      ),
-    );
-});
-
 const requestAllCodexModels = Effect.fn("requestAllCodexModels")(function* (
-  client: CodexClient.CodexAppServerClientShape,
+  client: CodexClient.CodexAppServerClient["Service"],
 ) {
   const models: ServerProviderModel[] = [];
   let cursor: string | null | undefined = undefined;
@@ -351,7 +297,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   // Expand here for parity with `CodexTextGeneration`/`CodexSessionRuntime`.
   const resolvedHomePath = input.homePath ? expandHomePath(input.homePath) : undefined;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const environment: NodeJS.ProcessEnv = {
+  const environment = {
     ...input.environment,
     ...(resolvedHomePath ? { CODEX_HOME: resolvedHomePath } : {}),
   };
@@ -409,17 +355,10 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
-  const skillExtraRoots = resolveCodexSkillExtraRoots(
-    resolvedHomePath,
-    environment[T3CODE_CODEX_SKILL_EXTRA_ROOTS_ENV],
-  );
-  yield* configureCodexSkillExtraRoots(client, skillExtraRoots);
-
   const [skillsResponse, models] = yield* Effect.all(
     [
       client.request("skills/list", {
         cwds: [input.cwd],
-        forceReload: true,
       }),
       requestAllCodexModels(client),
     ],

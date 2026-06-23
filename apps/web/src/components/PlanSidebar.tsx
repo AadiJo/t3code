@@ -1,5 +1,9 @@
 import { memo, useState, useCallback } from "react";
-import type { EnvironmentId, OrchestrationThreadGoal, ScopedThreadRef } from "@t3tools/contracts";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -24,10 +28,10 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../proposedPlan";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
-import { readEnvironmentApi } from "~/environmentApi";
+import { projectEnvironment } from "~/state/projects";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { ThreadGoalPanel } from "./ThreadGoalPanel";
+import { useAtomCommand } from "~/state/use-atom-command";
 
 function stepStatusIcon(status: string): React.ReactNode {
   if (status === "completed") {
@@ -54,9 +58,6 @@ function stepStatusIcon(status: string): React.ReactNode {
 interface PlanSidebarProps {
   activePlan: ActivePlanState | null;
   activeProposedPlan: LatestProposedPlanState | null;
-  activeGoal: OrchestrationThreadGoal | null;
-  goalCommandDisabled?: boolean | null;
-  onSubmitGoalCommand?: (command: "/goal pause" | "/goal resume" | "/goal clear") => void;
   label?: string;
   environmentId: EnvironmentId;
   threadRef?: ScopedThreadRef | undefined;
@@ -69,9 +70,6 @@ interface PlanSidebarProps {
 const PlanSidebar = memo(function PlanSidebar({
   activePlan,
   activeProposedPlan,
-  activeGoal,
-  goalCommandDisabled = false,
-  onSubmitGoalCommand,
   label = "Plan",
   environmentId,
   threadRef,
@@ -82,7 +80,10 @@ const PlanSidebar = memo(function PlanSidebar({
 }: PlanSidebarProps) {
   const [proposedPlanExpanded, setProposedPlanExpanded] = useState(false);
   const [isSavingToWorkspace, setIsSavingToWorkspace] = useState(false);
-  const { copyToClipboard, isCopied } = useCopyToClipboard();
+  const writeProjectFile = useAtomCommand(projectEnvironment.writeFile, {
+    reportFailure: false,
+  });
+  const { copyToClipboard, isCopied } = useCopyToClipboard({ target: "plan" });
 
   const planMarkdown = activeProposedPlan?.planMarkdown ?? null;
   const displayedPlanMarkdown = planMarkdown ? stripDisplayedPlanMarkdown(planMarkdown) : null;
@@ -100,24 +101,29 @@ const PlanSidebar = memo(function PlanSidebar({
   }, [planMarkdown]);
 
   const handleSaveToWorkspace = useCallback(() => {
-    const api = readEnvironmentApi(environmentId);
-    if (!api || !workspaceRoot || !planMarkdown) return;
+    if (!workspaceRoot || !planMarkdown) return;
     const filename = buildProposedPlanMarkdownFilename(planMarkdown);
     setIsSavingToWorkspace(true);
-    void api.projects
-      .writeFile({
-        cwd: workspaceRoot,
-        relativePath: filename,
-        contents: normalizePlanMarkdownForExport(planMarkdown),
-      })
-      .then((result) => {
+    void (async () => {
+      const result = await writeProjectFile({
+        environmentId,
+        input: {
+          cwd: workspaceRoot,
+          relativePath: filename,
+          contents: normalizePlanMarkdownForExport(planMarkdown),
+        },
+      });
+      setIsSavingToWorkspace(false);
+      if (result._tag === "Success") {
         toastManager.add({
           type: "success",
           title: "Plan saved",
-          description: result.relativePath,
+          description: result.value.relativePath,
         });
-      })
-      .catch((error) => {
+        return;
+      }
+      if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
         toastManager.add(
           stackedThreadToast({
             type: "error",
@@ -125,12 +131,9 @@ const PlanSidebar = memo(function PlanSidebar({
             description: error instanceof Error ? error.message : "An error occurred.",
           }),
         );
-      })
-      .then(
-        () => setIsSavingToWorkspace(false),
-        () => setIsSavingToWorkspace(false),
-      );
-  }, [environmentId, planMarkdown, workspaceRoot]);
+      }
+    })();
+  }, [environmentId, planMarkdown, workspaceRoot, writeProjectFile]);
 
   return (
     <div
@@ -141,6 +144,7 @@ const PlanSidebar = memo(function PlanSidebar({
           : "h-full w-full",
       )}
     >
+      {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div className="flex items-center gap-2">
           <Badge
@@ -188,22 +192,17 @@ const PlanSidebar = memo(function PlanSidebar({
         </div>
       </div>
 
+      {/* Content */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-4 p-3">
-          {activeGoal ? (
-            <ThreadGoalPanel
-              goal={activeGoal}
-              commandDisabled={goalCommandDisabled}
-              {...(onSubmitGoalCommand ? { onSubmitGoalCommand } : {})}
-            />
-          ) : null}
-
+        <div className="p-3 space-y-4">
+          {/* Explanation */}
           {activePlan?.explanation ? (
             <p className="text-[13px] leading-relaxed text-muted-foreground/80">
               {activePlan.explanation}
             </p>
           ) : null}
 
+          {/* Plan Steps */}
           {activePlan && activePlan.steps.length > 0 ? (
             <div className="space-y-1">
               <p className="mb-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
@@ -236,6 +235,7 @@ const PlanSidebar = memo(function PlanSidebar({
             </div>
           ) : null}
 
+          {/* Proposed Plan Markdown */}
           {planMarkdown ? (
             <div className="space-y-2">
               <button
@@ -265,7 +265,8 @@ const PlanSidebar = memo(function PlanSidebar({
             </div>
           ) : null}
 
-          {!activeGoal && !activePlan && !planMarkdown ? (
+          {/* Empty state */}
+          {!activePlan && !planMarkdown ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="text-[13px] text-muted-foreground/40">No active plan yet.</p>
               <p className="mt-1 text-[11px] text-muted-foreground/30">

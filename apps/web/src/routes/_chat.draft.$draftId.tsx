@@ -1,67 +1,40 @@
-import { scopeProjectRef } from "@t3tools/client-runtime";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect } from "react";
 import ChatView from "../components/ChatView";
+import { threadHasStarted } from "../components/ChatView.logic";
 import {
-  shouldDeleteAbandonedPromotedDraftThread,
-  threadHasConversationContent,
-} from "../components/ChatView.logic";
-import { useComposerDraftStore, DraftId, type DraftSessionState } from "../composerDraftStore";
+  DraftId,
+  markPromotedDraftThreadByRef,
+  useComposerDraftStore,
+} from "../composerDraftStore";
 import { SidebarInset } from "../components/ui/sidebar";
-import {
-  createProjectSelectorByRef,
-  createThreadSelectorAcrossEnvironments,
-} from "../storeSelectors";
-import { selectSidebarThreadSummaryByRef, selectThreadByRef, useStore } from "../store";
 import { buildThreadRouteParams } from "../threadRoutes";
-import { readEnvironmentApi } from "../environmentApi";
-import { newCommandId } from "../lib/utils";
-import type { Thread } from "../types";
-import { selectLocalDispatchSnapshot, useLocalDispatchStore } from "../localDispatchStore";
-import {
-  deletePrewarmedDraftThreadId,
-  ensurePrewarmedDraftThreadSession,
-  prewarmDraftThreadSession,
-} from "../draftThreadPrewarm";
+import { useThread, useThreadRefs } from "../state/entities";
 
 function DraftChatThreadRouteView() {
   const navigate = useNavigate();
   const { draftId: rawDraftId } = Route.useParams();
   const draftId = DraftId.make(rawDraftId);
   const draftSession = useComposerDraftStore((store) => store.getDraftSession(draftId));
-  const serverThread = useStore(
-    useMemo(
-      () => createThreadSelectorAcrossEnvironments(draftSession?.threadId ?? null),
-      [draftSession?.threadId],
-    ),
-  );
-  const cleanupStateRef = useRef<{
-    draftSession: DraftSessionState | null;
-    serverThread: Thread | null | undefined;
-  }>({ draftSession: null, serverThread: undefined });
-  const draftProjectRef = useMemo(
-    () =>
-      draftSession ? scopeProjectRef(draftSession.environmentId, draftSession.projectId) : null,
-    [draftSession],
-  );
-  const draftProject = useStore(
-    useMemo(() => createProjectSelectorByRef(draftProjectRef), [draftProjectRef]),
-  );
-  const serverThreadStarted = threadHasConversationContent(serverThread);
-  const canonicalThreadRef = useMemo(
-    () =>
-      draftSession?.promotedTo
-        ? serverThreadStarted
-          ? draftSession.promotedTo
-          : null
-        : serverThread
-          ? {
-              environmentId: serverThread.environmentId,
-              threadId: serverThread.id,
-            }
-          : null,
-    [draftSession?.promotedTo, serverThread, serverThreadStarted],
-  );
+  const threadRefs = useThreadRefs();
+  const inferredThreadRef = draftSession
+    ? (threadRefs.find(
+        (ref) =>
+          ref.environmentId === draftSession.environmentId &&
+          ref.threadId === draftSession.threadId,
+      ) ?? null)
+    : null;
+  const serverThreadRef = draftSession?.promotedTo ?? inferredThreadRef;
+  const serverThread = useThread(serverThreadRef);
+  const serverThreadStarted = threadHasStarted(serverThread);
+  const canonicalThreadRef = serverThreadStarted ? serverThreadRef : null;
+
+  useEffect(() => {
+    if (!inferredThreadRef || draftSession?.promotedTo) {
+      return;
+    }
+    markPromotedDraftThreadByRef(inferredThreadRef);
+  }, [draftSession?.promotedTo, inferredThreadRef]);
 
   useEffect(() => {
     if (!canonicalThreadRef) {
@@ -73,75 +46,6 @@ function DraftChatThreadRouteView() {
       replace: true,
     });
   }, [canonicalThreadRef, navigate]);
-
-  useEffect(() => {
-    cleanupStateRef.current = { draftSession, serverThread };
-  }, [draftSession, serverThread]);
-
-  useEffect(() => {
-    return () => {
-      const { draftSession: latestDraftSession, serverThread: latestServerThread } =
-        cleanupStateRef.current;
-      if (!latestDraftSession?.promotedTo || !latestServerThread) {
-        return;
-      }
-
-      const latestThreadRef = latestDraftSession.promotedTo;
-      const latestState = useStore.getState();
-      const currentServerThread = selectThreadByRef(latestState, latestThreadRef);
-      const currentSidebarThread = selectSidebarThreadSummaryByRef(latestState, latestThreadRef);
-      const currentLocalDispatch = selectLocalDispatchSnapshot(
-        useLocalDispatchStore.getState().byThreadKey,
-        latestThreadRef,
-      );
-      if (
-        !shouldDeleteAbandonedPromotedDraftThread({
-          draftThread: latestDraftSession,
-          threadRef: latestThreadRef,
-          serverThread: currentServerThread ?? latestServerThread,
-          sidebarThread: currentSidebarThread,
-          hasLocalDispatch: currentLocalDispatch !== null,
-        })
-      ) {
-        return;
-      }
-
-      const api = readEnvironmentApi(latestDraftSession.environmentId);
-      void api?.orchestration
-        .dispatchCommand({
-          type: "thread.delete",
-          commandId: newCommandId(),
-          threadId: latestDraftSession.threadId,
-        })
-        .catch(() => undefined);
-      useComposerDraftStore.getState().clearDraftThread(draftId);
-      deletePrewarmedDraftThreadId(latestDraftSession);
-    };
-  }, [draftId]);
-
-  useEffect(() => {
-    if (!draftSession || serverThread || draftSession.envMode !== "local" || !draftProject) {
-      return;
-    }
-    // Keep the prewarmed server thread out of the sidebar until the user sends
-    // the first message, matching useHandleNewThread. Without this, navigating
-    // straight to a draft route (or any path that didn't pre-register the
-    // thread in prewarmedDraftThreadIds) creates the thread unhidden, so it
-    // briefly surfaces in the sidebar during the connecting phase.
-    prewarmDraftThreadSession(draftSession, draftProject, { hideCreatedThread: true });
-  }, [draftProject, draftSession, serverThread]);
-
-  useEffect(() => {
-    if (
-      !draftSession ||
-      !serverThread ||
-      draftSession.envMode !== "local" ||
-      threadHasConversationContent(serverThread)
-    ) {
-      return;
-    }
-    void ensurePrewarmedDraftThreadSession(draftSession);
-  }, [draftSession, serverThread]);
 
   useEffect(() => {
     if (draftSession || canonicalThreadRef) {

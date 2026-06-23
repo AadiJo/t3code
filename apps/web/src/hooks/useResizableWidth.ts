@@ -1,11 +1,5 @@
 import * as Schema from "effect/Schema";
-import {
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react";
 
 import { getLocalStorageItem, setLocalStorageItem } from "./useLocalStorage";
 
@@ -17,16 +11,12 @@ export interface UseResizableWidthOptions {
   readonly defaultWidth: number;
   readonly minWidth: number;
   readonly maxWidth: number;
-  /** Optional layout basis used to scale the width when the containing space resizes. */
-  readonly resizeBasis?: number;
   /**
    * Which edge of the host element carries the drag handle:
    *   - "left"  → panel grows leftward (right-anchored panels)
    *   - "right" → panel grows rightward (left-anchored panels)
    */
   readonly edge: "left" | "right";
-  readonly onDragStart?: () => void;
-  readonly onDragEnd?: () => void;
 }
 
 export interface ResizableWidthHandlers {
@@ -49,16 +39,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const {
-    storageKey,
-    defaultWidth,
-    minWidth,
-    maxWidth,
-    resizeBasis,
-    edge,
-    onDragStart,
-    onDragEnd,
-  } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
 
   const clamp = useCallback(
     (value: number): number => {
@@ -74,37 +55,13 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     try {
       const stored = getLocalStorageItem(storageKey, WidthSchema);
       return clamp(stored ?? defaultWidth);
-    } catch {
+    } catch (error) {
+      console.error("Could not read persisted panel width.", error);
       return defaultWidth;
     }
   });
 
-  // Re-clamp if min/max change at runtime (e.g. window resize narrows max).
-  useEffect(() => {
-    setWidth((current) => clamp(current));
-  }, [clamp]);
-
-  const resizeBasisRef = useRef(resizeBasis);
-  useEffect(() => {
-    if (resizeBasis === undefined) {
-      resizeBasisRef.current = resizeBasis;
-      return;
-    }
-
-    const previousBasis = resizeBasisRef.current;
-    resizeBasisRef.current = resizeBasis;
-
-    if (
-      previousBasis === undefined ||
-      previousBasis <= 0 ||
-      resizeBasis <= 0 ||
-      previousBasis === resizeBasis
-    ) {
-      return;
-    }
-
-    setWidth((current) => clamp((current * resizeBasis) / previousBasis));
-  }, [clamp, resizeBasis]);
+  const clampedWidth = clamp(width);
 
   const dragStateRef = useRef<{
     pointerId: number;
@@ -115,27 +72,23 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     target: HTMLElement;
   } | null>(null);
 
-  const releasePointer = useCallback(
-    (pointerId: number) => {
-      const state = dragStateRef.current;
-      if (!state) return;
-      if (state.rafId !== null) {
-        cancelAnimationFrame(state.rafId);
+  const releasePointer = useCallback((pointerId: number) => {
+    const state = dragStateRef.current;
+    if (!state) return;
+    if (state.rafId !== null) {
+      cancelAnimationFrame(state.rafId);
+    }
+    try {
+      if (state.target.hasPointerCapture(pointerId)) {
+        state.target.releasePointerCapture(pointerId);
       }
-      try {
-        if (state.target.hasPointerCapture(pointerId)) {
-          state.target.releasePointerCapture(pointerId);
-        }
-      } catch {
-        // pointer may already be released; harmless.
-      }
-      document.body.style.removeProperty("cursor");
-      document.body.style.removeProperty("user-select");
-      onDragEnd?.();
-      dragStateRef.current = null;
-    },
-    [onDragEnd],
-  );
+    } catch {
+      // pointer may already be released; harmless.
+    }
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+    dragStateRef.current = null;
+  }, []);
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -150,17 +103,16 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
       }
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
-      onDragStart?.();
       dragStateRef.current = {
         pointerId: event.pointerId,
         startX: event.clientX,
-        startWidth: width,
-        pending: width,
+        startWidth: clampedWidth,
+        pending: clampedWidth,
         rafId: null,
         target,
       };
     },
-    [onDragStart, width],
+    [clampedWidth],
   );
 
   const onPointerMove = useCallback(
@@ -190,8 +142,8 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
       // Commit once at drag-end to avoid 60Hz localStorage writes.
       try {
         setLocalStorageItem(storageKey, finalWidth, WidthSchema);
-      } catch {
-        // localStorage may be full / disabled; the in-memory state still wins.
+      } catch (error) {
+        console.error("Could not persist panel width.", error);
       }
       setWidth(finalWidth);
     },
@@ -210,7 +162,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   );
 
   return {
-    width,
+    width: clampedWidth,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }

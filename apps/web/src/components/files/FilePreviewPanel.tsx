@@ -1,4 +1,3 @@
-import { scopedThreadKey } from "@t3tools/client-runtime";
 import type {
   EditorId,
   EnvironmentId,
@@ -9,25 +8,21 @@ import { VirtualizedFile, type SelectedLineRange } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/editor";
 import { EditorProvider, File, type FileOptions, Virtualizer } from "@pierre/diffs/react";
 import {
-  ChevronRight,
-  Code2,
-  Eye,
-  FolderTree,
-  Globe2,
-  LoaderCircle,
-  TextWrapIcon,
-} from "lucide-react";
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { ChevronRight, Code2, Eye, FolderTree, Globe2, LoaderCircle } from "lucide-react";
+import * as Schema from "effect/Schema";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isBrowserPreviewFile, openFileInPreview } from "~/browser/openFileInPreview";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
-import { ensureEnvironmentApi } from "~/environmentApi";
-import { usePrimaryEnvironmentId } from "~/environments/primary/context";
+import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
+import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { cn } from "~/lib/utils";
-import { useMarkdownViewPreferenceStore } from "~/markdownViewPreferenceStore";
 import { isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { resolvePathLinkTarget } from "~/terminal-links";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -36,6 +31,12 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { buildFileReviewComment } from "~/reviewCommentContext";
+import { assetEnvironment } from "~/state/assets";
+import { useEnvironmentHttpBaseUrl, usePrimaryEnvironmentId } from "~/state/environments";
+import { previewEnvironment } from "~/state/preview";
+import { projectEnvironment } from "~/state/projects";
+import { useAtomCommand } from "~/state/use-atom-command";
+import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
 import FileBrowserPanel from "./FileBrowserPanel";
 import {
@@ -51,11 +52,7 @@ import { installFileEditorDismissal } from "./fileEditorDismissal";
 import { LocalCommentAnnotation } from "./LocalCommentAnnotation";
 import { projectFileCacheKey } from "./fileContentRevision";
 import { fileBreadcrumbs } from "./filePath";
-import {
-  isMarkdownPreviewFile,
-  setMarkdownTaskChecked,
-  shouldRenderMarkdownPreview,
-} from "./filePreviewMode";
+import { isMarkdownPreviewFile, setMarkdownTaskChecked } from "./filePreviewMode";
 import { FileSaveCoordinator } from "./fileSaveCoordinator";
 import {
   confirmProjectFileQueryData,
@@ -80,7 +77,6 @@ interface FilePreviewPanelProps {
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
-const FILE_SOURCE_WRAP_STORAGE_KEY = "t3code.fileSourceLineWrap";
 const FILE_SAVE_DEBOUNCE_MS = 500;
 const FILE_LINK_REVEAL_ATTRIBUTE = "data-file-link-reveal";
 const FILE_LINK_REVEAL_UNSAFE_CSS = `
@@ -252,8 +248,8 @@ interface EditableFileSurfaceProps {
   composerDraftTarget: ScopedThreadRef | DraftId;
   contents: string;
   resolvedTheme: "light" | "dark";
-  sourceLineWrap: boolean;
   revealRequestId: number;
+  wordWrap: boolean;
   onPostRender: FilePostRender;
   onPendingChange: (relativePath: string, pending: boolean) => void;
 }
@@ -272,23 +268,22 @@ function useFileSaveCoordinator({
   EditableFileSurfaceProps,
   "environmentId" | "cwd" | "relativePath" | "onPendingChange"
 >): FileSaveCoordinator {
+  const writeFile = useAtomCommand(projectEnvironment.writeFile);
   const coordinator = useMemo(
     () =>
       new FileSaveCoordinator({
         debounceMs: FILE_SAVE_DEBOUNCE_MS,
         onPendingChange: (pending) => onPendingChange(relativePath, pending),
-        persist: async (nextContents) => {
-          await ensureEnvironmentApi(environmentId).projects.writeFile({
-            cwd,
-            relativePath,
-            contents: nextContents,
-          });
-        },
+        persist: (nextContents) =>
+          writeFile({
+            environmentId,
+            input: { cwd, relativePath, contents: nextContents },
+          }),
         onConfirmed: (confirmedContents) => {
           confirmProjectFileQueryData(environmentId, cwd, relativePath, confirmedContents);
         },
       }),
-    [cwd, environmentId, onPendingChange, relativePath],
+    [cwd, environmentId, onPendingChange, relativePath, writeFile],
   );
 
   useEffect(() => () => coordinator.dispose(), [coordinator]);
@@ -302,8 +297,8 @@ function EditableFileSurface({
   composerDraftTarget,
   contents,
   resolvedTheme,
-  sourceLineWrap,
   revealRequestId,
+  wordWrap,
   onPostRender,
   onPendingChange,
 }: EditableFileSurfaceProps) {
@@ -503,9 +498,9 @@ function EditableFileSurface({
 
   return (
     <EditorProvider editor={editor}>
-      <div ref={surfaceRef} className="flex min-h-0 min-w-0 flex-1">
+      <div ref={surfaceRef} className="flex min-h-0 flex-1">
         <Virtualizer
-          className="file-preview-virtualizer min-h-0 min-w-0 flex-1 overflow-auto"
+          className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
           config={{
             overscrollSize: 600,
             intersectionObserverMargin: 1200,
@@ -524,7 +519,7 @@ function EditableFileSurface({
               onGutterUtilityClick: setSelectedRange,
               onLineSelectionChange: setSelectedRange,
               onLineSelectionEnd: handleLineSelectionEnd,
-              overflow: sourceLineWrap ? "wrap" : "scroll",
+              overflow: wordWrap ? "wrap" : "scroll",
               theme: resolveDiffThemeName(resolvedTheme),
               themeType: resolvedTheme,
               unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
@@ -567,9 +562,9 @@ function RenderedMarkdownSurface({
   EditableFileSurfaceProps,
   | "resolvedTheme"
   | "composerDraftTarget"
-  | "sourceLineWrap"
   | "revealLine"
   | "revealRequestId"
+  | "wordWrap"
   | "onPostRender"
 > & {
   threadRef: ScopedThreadRef;
@@ -604,16 +599,9 @@ function RenderedMarkdownSurface({
 
 function initialExplorerOpen(): boolean {
   try {
-    return window.localStorage.getItem(FILE_EXPLORER_STORAGE_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
-function initialSourceLineWrap(): boolean {
-  try {
-    return window.localStorage.getItem(FILE_SOURCE_WRAP_STORAGE_KEY) !== "false";
-  } catch {
+    return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? true;
+  } catch (error) {
+    console.error(error);
     return true;
   }
 }
@@ -633,30 +621,27 @@ export default function FilePreviewPanel({
   onPendingChange,
 }: FilePreviewPanelProps) {
   const { resolvedTheme } = useTheme();
+  const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const file = useProjectFileQuery(environmentId, cwd, relativePath);
-  const threadKey = scopedThreadKey(threadRef);
-  const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
-  const [sourceLineWrap, setSourceLineWrap] = useState(initialSourceLineWrap);
-  const [markdownPreviewOverride, setMarkdownPreviewOverride] = useState<{
-    path: string;
-    revealRequestId: number;
-  } | null>(null);
-  const markdownViewMode = useMarkdownViewPreferenceStore((state) => {
-    return state.byThreadKey[threadKey]?.markdownViewMode ?? "raw";
+  const environmentHttpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
+  const createAssetUrl = useAtomQueryRunner(assetEnvironment.createUrl, {
+    reportFailure: false,
   });
-  const setMarkdownViewMode = useMarkdownViewPreferenceStore((state) => state.setMarkdownViewMode);
+  const openPreview = useAtomCommand(previewEnvironment.open, {
+    reportFailure: false,
+  });
+  const file = useProjectFileQuery(environmentId, cwd, relativePath);
+  const [explorerOpen, setExplorerOpen] = useState(initialExplorerOpen);
+  const [markdownView, setMarkdownView] = useState<{
+    path: string | null;
+    revealRequestId: number | null;
+  }>({ path: null, revealRequestId: null });
   const breadcrumbRef = useRef<HTMLDivElement>(null);
   const isMarkdown = relativePath ? isMarkdownPreviewFile(relativePath) : false;
-  const renderMarkdown = shouldRenderMarkdownPreview({
-    isMarkdown,
-    markdownViewMode,
-    revealLine,
-    hasRevealOverride:
-      relativePath !== null &&
-      markdownPreviewOverride?.path === relativePath &&
-      markdownPreviewOverride.revealRequestId === revealRequestId,
-  });
+  const renderMarkdown =
+    isMarkdown &&
+    markdownView.path === relativePath &&
+    (revealLine === null || markdownView.revealRequestId === revealRequestId);
   const canOpenInBrowser =
     relativePath !== null && isPreviewSupportedInRuntime() && isBrowserPreviewFile(relativePath);
   const absolutePath = relativePath ? resolvePathLinkTarget(relativePath, cwd) : null;
@@ -673,31 +658,32 @@ export default function FilePreviewPanel({
     currentCrumb?.scrollIntoView({ block: "nearest", inline: "end" });
   }, [relativePath]);
 
-  useEffect(() => {
-    setMarkdownPreviewOverride(null);
-  }, [threadKey]);
-
   const toggleExplorer = () => {
     setExplorerOpen((current) => {
       const next = !current;
       try {
-        window.localStorage.setItem(FILE_EXPLORER_STORAGE_KEY, String(next));
-      } catch {}
+        setLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, next, Schema.Boolean);
+      } catch (error) {
+        console.error(error);
+      }
       return next;
     });
   };
 
-  const toggleSourceLineWrap = (pressed: boolean) => {
-    const next = Boolean(pressed);
-    setSourceLineWrap(next);
-    try {
-      window.localStorage.setItem(FILE_SOURCE_WRAP_STORAGE_KEY, String(next));
-    } catch {}
-  };
-
-  const handleOpenInBrowser = () => {
-    if (!absolutePath) return;
-    void openFileInPreview(threadRef, absolutePath).catch((error) => {
+  const handleOpenInBrowser = useCallback(() => {
+    if (!absolutePath || !environmentHttpBaseUrl) return;
+    void (async () => {
+      const result = await openFileInPreview({
+        threadRef,
+        filePath: absolutePath,
+        httpBaseUrl: environmentHttpBaseUrl,
+        createAssetUrl,
+        openPreview,
+      });
+      if (result._tag === "Success" || isAtomCommandInterrupted(result)) {
+        return;
+      }
+      const error = squashAtomCommandFailure(result);
       toastManager.add(
         stackedThreadToast({
           type: "error",
@@ -705,8 +691,8 @@ export default function FilePreviewPanel({
           description: error instanceof Error ? error.message : "An error occurred.",
         }),
       );
-    });
-  };
+    })();
+  }, [absolutePath, createAssetUrl, environmentHttpBaseUrl, openPreview, threadRef]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -746,6 +732,7 @@ export default function FilePreviewPanel({
           </ScrollArea>
           {absolutePath && environmentId === primaryEnvironmentId ? (
             <OpenInPicker
+              environmentId={environmentId}
               keybindings={keybindings}
               availableEditors={availableEditors}
               openInCwd={absolutePath}
@@ -761,12 +748,10 @@ export default function FilePreviewPanel({
                     className="shrink-0"
                     pressed={renderMarkdown}
                     onPressedChange={(pressed) => {
-                      setMarkdownViewMode(threadRef, pressed ? "preview" : "raw");
-                      if (pressed && relativePath && revealLine !== null) {
-                        setMarkdownPreviewOverride({ path: relativePath, revealRequestId });
-                        return;
-                      }
-                      setMarkdownPreviewOverride(null);
+                      setMarkdownView({
+                        path: pressed ? relativePath : null,
+                        revealRequestId: pressed ? revealRequestId : null,
+                      });
                     }}
                     aria-label={renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
                     variant="ghost"
@@ -804,27 +789,6 @@ export default function FilePreviewPanel({
             <TooltipTrigger
               render={
                 <Toggle
-                  className="size-7 shrink-0 border border-transparent p-0 data-pressed:border-primary/35 data-pressed:bg-primary/12 data-pressed:text-primary hover:data-pressed:bg-primary/16"
-                  pressed={sourceLineWrap}
-                  onPressedChange={toggleSourceLineWrap}
-                  aria-label={
-                    sourceLineWrap ? "Disable source line wrapping" : "Enable source line wrapping"
-                  }
-                  variant="ghost"
-                  size="sm"
-                >
-                  <TextWrapIcon className="size-3.5" />
-                </Toggle>
-              }
-            />
-            <TooltipPopup>
-              {sourceLineWrap ? "Disable source line wrapping" : "Enable source line wrapping"}
-            </TooltipPopup>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Toggle
                   className="shrink-0"
                   pressed={explorerOpen}
                   onPressedChange={toggleExplorer}
@@ -847,10 +811,10 @@ export default function FilePreviewPanel({
           Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
         </div>
       ) : null}
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden" data-file-preview-split>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className={cn(
-            "min-w-0 basis-0 flex-1 flex-col overflow-hidden",
+            "min-w-0 flex-1 flex-col overflow-hidden",
             relativePath ? "flex" : "hidden",
           )}
         >
@@ -875,7 +839,7 @@ export default function FilePreviewPanel({
             ) : file.data.truncated ? (
               <Virtualizer
                 key={`${relativePath}:${resolvedTheme}:${file.data.byteLength}`}
-                className="file-preview-virtualizer min-h-0 min-w-0 flex-1 overflow-auto"
+                className="file-preview-virtualizer min-h-0 flex-1 overflow-auto"
                 config={{
                   overscrollSize: 600,
                   intersectionObserverMargin: 1200,
@@ -889,7 +853,7 @@ export default function FilePreviewPanel({
                   }}
                   options={{
                     disableFileHeader: true,
-                    overflow: sourceLineWrap ? "wrap" : "scroll",
+                    overflow: wordWrap ? "wrap" : "scroll",
                     theme: resolveDiffThemeName(resolvedTheme),
                     themeType: resolvedTheme,
                     unsafeCSS: FILE_LINK_REVEAL_UNSAFE_CSS,
@@ -907,8 +871,8 @@ export default function FilePreviewPanel({
                 composerDraftTarget={composerDraftTarget}
                 contents={file.data.contents}
                 resolvedTheme={resolvedTheme}
-                sourceLineWrap={sourceLineWrap}
                 revealRequestId={revealRequestId}
+                wordWrap={wordWrap}
                 onPostRender={onFilePostRender}
                 onPendingChange={onPendingChange}
               />
@@ -918,12 +882,11 @@ export default function FilePreviewPanel({
         {explorerOpen || relativePath === null ? (
           <aside
             className={cn(
-              "flex min-h-0 min-w-0 shrink-0 bg-background",
+              "flex min-h-0 shrink-0 bg-background",
               relativePath
-                ? "w-[min(22rem,42%)] max-w-[42%] border-l border-border/60"
-                : "basis-0 flex-1",
+                ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
+                : "min-w-0 flex-1",
             )}
-            data-file-preview-explorer
           >
             <FileBrowserPanel
               key={`${environmentId}:${cwd}`}

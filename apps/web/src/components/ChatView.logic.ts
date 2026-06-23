@@ -9,16 +9,11 @@ import {
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
-import {
-  type ChatMessage,
-  type SessionPhase,
-  type SidebarThreadSummary,
-  type Thread,
-  type ThreadSession,
-} from "../types";
+import { type ChatMessage, type SessionPhase, type Thread } from "../types";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
-import { selectThreadByRef, useStore } from "../store";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { environmentThreadDetails } from "../state/threads";
 import {
   filterTerminalContextsWithText,
   stripInlineTerminalContextPlaceholders,
@@ -36,12 +31,10 @@ export function buildLocalDraftThread(
   threadId: ThreadId,
   draftThread: DraftThreadState,
   fallbackModelSelection: ModelSelection,
-  error: string | null,
 ): Thread {
   return {
     id: threadId,
     environmentId: draftThread.environmentId,
-    codexThreadId: null,
     projectId: draftThread.projectId,
     title: "New thread",
     modelSelection: fallbackModelSelection,
@@ -49,16 +42,17 @@ export function buildLocalDraftThread(
     interactionMode: draftThread.interactionMode,
     session: null,
     messages: [],
-    error,
     createdAt: draftThread.createdAt,
+    updatedAt: draftThread.createdAt,
     archivedAt: null,
+    deletedAt: null,
     latestTurn: null,
+    goal: null,
     branch: draftThread.branch,
     worktreePath: draftThread.worktreePath,
-    turnDiffSummaries: [],
+    checkpoints: [],
     activities: [],
     proposedPlans: [],
-    goal: null,
   };
 }
 
@@ -257,55 +251,9 @@ export function buildExpiredTerminalContextToastCopy(
 }
 
 export function threadHasStarted(thread: Thread | null | undefined): boolean {
-  return Boolean(thread && (threadHasConversationContent(thread) || thread.session !== null));
-}
-
-export function threadHasConversationContent(thread: Thread | null | undefined): boolean {
-  return Boolean(thread && (thread.latestTurn !== null || thread.messages.length > 0));
-}
-
-export function sidebarThreadHasConversationContent(
-  thread: SidebarThreadSummary | null | undefined,
-): boolean {
   return Boolean(
-    thread &&
-    (thread.latestTurn !== null ||
-      (thread.latestUserMessageAt !== null && thread.latestUserMessageAt !== undefined)),
+    thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),
   );
-}
-
-export function promotedDraftThreadMatchesRef(
-  draftThread: Pick<DraftThreadState, "promotedTo"> | null | undefined,
-  threadRef: ScopedThreadRef | null | undefined,
-): boolean {
-  return Boolean(
-    threadRef &&
-    draftThread?.promotedTo &&
-    draftThread.promotedTo.environmentId === threadRef.environmentId &&
-    draftThread.promotedTo.threadId === threadRef.threadId,
-  );
-}
-
-export function shouldDeleteAbandonedPromotedDraftThread(input: {
-  draftThread: Pick<DraftThreadState, "promotedTo"> | null | undefined;
-  threadRef: ScopedThreadRef | null | undefined;
-  serverThread: Thread | null | undefined;
-  sidebarThread?: SidebarThreadSummary | null | undefined;
-  hasLocalDispatch?: boolean | undefined;
-}): boolean {
-  if (!promotedDraftThreadMatchesRef(input.draftThread, input.threadRef)) {
-    return false;
-  }
-  if (input.hasLocalDispatch) {
-    return false;
-  }
-  if (threadHasConversationContent(input.serverThread)) {
-    return false;
-  }
-  if (sidebarThreadHasConversationContent(input.sidebarThread)) {
-    return false;
-  }
-  return true;
 }
 
 // `threadProvider` is the open branded driver kind carried by the session.
@@ -325,15 +273,11 @@ export function deriveLockedProvider(input: {
   selectedProvider: string | null;
   threadProvider: string | null;
 }): ProviderDriverKind | null {
-  // Lock only once the conversation actually has content (a turn or a sent
-  // message). A prewarmed thread has a live `session` before the user sends
-  // anything, but we must let them pick a different provider up until that
-  // first message — so gate on conversation content, not session existence.
-  if (!threadHasConversationContent(input.thread)) {
+  if (!threadHasStarted(input.thread)) {
     return null;
   }
-  const sessionProvider = input.thread?.session?.provider ?? null;
-  if (sessionProvider) {
+  const sessionProvider = input.thread?.session?.providerName ?? null;
+  if (sessionProvider && isProviderDriverKind(sessionProvider)) {
     return sessionProvider;
   }
   const narrowedThreadProvider =
@@ -389,7 +333,8 @@ export async function waitForStartedServerThread(
   threadRef: ScopedThreadRef,
   timeoutMs = 1_000,
 ): Promise<boolean> {
-  const getThread = () => selectThreadByRef(useStore.getState(), threadRef);
+  const threadAtom = environmentThreadDetails.detailAtom(threadRef);
+  const getThread = () => appAtomRegistry.get(threadAtom);
   const thread = getThread();
 
   if (threadHasStarted(thread)) {
@@ -411,8 +356,8 @@ export async function waitForStartedServerThread(
       resolve(result);
     };
 
-    const unsubscribe = useStore.subscribe((state) => {
-      if (!threadHasStarted(selectThreadByRef(state, threadRef))) {
+    const unsubscribe = appAtomRegistry.subscribe(threadAtom, (thread) => {
+      if (!threadHasStarted(thread)) {
         return;
       }
       finish(true);
@@ -436,7 +381,7 @@ export interface LocalDispatchSnapshot {
   latestTurnRequestedAt: string | null;
   latestTurnStartedAt: string | null;
   latestTurnCompletedAt: string | null;
-  sessionOrchestrationStatus: ThreadSession["orchestrationStatus"] | null;
+  sessionStatus: NonNullable<Thread["session"]>["status"] | null;
   sessionUpdatedAt: string | null;
 }
 
@@ -453,7 +398,7 @@ export function createLocalDispatchSnapshot(
     latestTurnRequestedAt: latestTurn?.requestedAt ?? null,
     latestTurnStartedAt: latestTurn?.startedAt ?? null,
     latestTurnCompletedAt: latestTurn?.completedAt ?? null,
-    sessionOrchestrationStatus: session?.orchestrationStatus ?? null,
+    sessionStatus: session?.status ?? null,
     sessionUpdatedAt: session?.updatedAt ?? null,
   };
 }
@@ -490,8 +435,8 @@ export function hasServerAcknowledgedLocalDispatch(input: {
       return false;
     }
     if (
+      session?.activeTurnId !== null &&
       session?.activeTurnId !== undefined &&
-      session.activeTurnId !== null &&
       latestTurn?.turnId !== session.activeTurnId
     ) {
       return false;
@@ -499,5 +444,9 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     return true;
   }
 
-  return latestTurnChanged && latestTurn !== null && latestTurn.startedAt !== null;
+  return (
+    latestTurnChanged ||
+    input.localDispatch.sessionStatus !== (session?.status ?? null) ||
+    input.localDispatch.sessionUpdatedAt !== (session?.updatedAt ?? null)
+  );
 }

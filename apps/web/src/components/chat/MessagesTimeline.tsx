@@ -5,7 +5,7 @@ import {
   type ServerProviderSkill,
   type TurnId,
 } from "@t3tools/contracts";
-import { parseScopedThreadKey } from "@t3tools/client-runtime";
+import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
   createContext,
   Fragment,
@@ -59,12 +59,10 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
-import { AnimatedHeight } from "../AnimatedHeight";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
-import { GoalTimelineRow } from "./GoalTimelineRow";
 import { MessageCopyButton } from "./MessageCopyButton";
 import {
   computeStableMessagesTimelineRows,
@@ -108,7 +106,6 @@ import {
   parseReviewCommentMessageSegments,
   type ReviewCommentContext,
 } from "../../reviewCommentContext";
-import { getVerticalScrollEndState } from "./scrollPosition";
 
 // ---------------------------------------------------------------------------
 // Context — shared state consumed by every row component via Context.
@@ -143,7 +140,6 @@ const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
 const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
-const TURN_FOLD_TRANSITION_MS = 220;
 
 // ---------------------------------------------------------------------------
 // Props (public API)
@@ -151,7 +147,6 @@ const TURN_FOLD_TRANSITION_MS = 220;
 
 interface MessagesTimelineProps {
   isWorking: boolean;
-  workingPhase?: "starting" | "running";
   activeTurnInProgress: boolean;
   activeTurnStartedAt: string | null;
   listRef: React.RefObject<LegendListRef | null>;
@@ -180,7 +175,6 @@ interface MessagesTimelineProps {
 
 export const MessagesTimeline = memo(function MessagesTimeline({
   isWorking,
-  workingPhase,
   activeTurnInProgress,
   activeTurnStartedAt,
   listRef,
@@ -203,11 +197,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   stickToBottomRequestId = 0,
 }: MessagesTimelineProps) {
   const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
-  const [stickToBottomEnabled, setStickToBottomEnabled] = useState(true);
 
-  // Fold content now expands inline beneath the "Worked for..." trigger. Keep
-  // bottom-stick disabled through the height transition so the trigger stays
-  // put instead of being re-pinned offscreen while the row remeasures.
+  // Toggling a fold inserts/removes rows between the fold row and the final
+  // message — everything above the trigger is unchanged, so the trigger stays
+  // put as long as the list doesn't re-anchor. maintainScrollAtEnd would do
+  // exactly that (pin the bottom content when row data changes while scrolled
+  // to the end), yanking the trigger out of view. Suppress it for the frames
+  // in which the toggle's data change and item measurements settle.
   const [foldToggleSettling, setFoldToggleSettling] = useState(false);
   const onToggleTurnFold = useCallback((turnId: TurnId) => {
     setFoldToggleSettling(true);
@@ -225,15 +221,19 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     if (!foldToggleSettling) {
       return;
     }
-    const timeoutId = window.setTimeout(() => {
-      setFoldToggleSettling(false);
-    }, TURN_FOLD_TRANSITION_MS);
-    return () => window.clearTimeout(timeoutId);
+    let secondFrameId: number | null = null;
+    const firstFrameId = window.requestAnimationFrame(() => {
+      secondFrameId = window.requestAnimationFrame(() => {
+        setFoldToggleSettling(false);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId !== null) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+    };
   }, [foldToggleSettling]);
-
-  const syncStickToBottomEnabled = useCallback((isAtEnd: boolean) => {
-    setStickToBottomEnabled((current) => (current === isAtEnd ? current : isAtEnd));
-  }, []);
 
   // An in-session interrupt leaves its turn expanded so the user keeps their
   // place; the next turn (or a reload, since this is local state) folds it.
@@ -271,7 +271,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         latestTurn,
         expandedTurnIds,
         isWorking,
-        workingPhase: workingPhase ?? "starting",
         activeTurnStartedAt,
         turnDiffSummaryByAssistantMessageId,
         revertTurnCountByUserMessageId,
@@ -281,7 +280,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       latestTurn,
       expandedTurnIds,
       isWorking,
-      workingPhase,
       activeTurnStartedAt,
       turnDiffSummaryByAssistantMessageId,
       revertTurnCountByUserMessageId,
@@ -289,32 +287,12 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
   const rows = useStableRows(rawRows);
 
-  const handleScroll = useCallback(
-    (event: unknown) => {
-      const scrollport =
-        typeof event === "object" && event !== null && "currentTarget" in event
-          ? event.currentTarget
-          : null;
-      if (scrollport instanceof HTMLElement) {
-        // Button visibility uses the lenient 8px DOM threshold, consistently
-        // with the reconciliation logic in ChatView. Stickiness uses
-        // LegendList's stricter (near-pixel) state so manual scrolls break out
-        // of auto-pin immediately — the two intentionally differ.
-        const { isAtEnd } = getVerticalScrollEndState(scrollport);
-        onIsAtEndChange(isAtEnd);
-        if (!isAtEnd) {
-          syncStickToBottomEnabled(false);
-          return;
-        }
-      }
-
-      const state = listRef.current?.getState?.();
-      if (state) {
-        syncStickToBottomEnabled(state.isAtEnd);
-      }
-    },
-    [listRef, onIsAtEndChange, syncStickToBottomEnabled],
-  );
+  const handleScroll = useCallback(() => {
+    const state = listRef.current?.getState?.();
+    if (state) {
+      onIsAtEndChange(state.isAtEnd);
+    }
+  }, [listRef, onIsAtEndChange]);
 
   const previousRowCountRef = useRef(rows.length);
   useEffect(() => {
@@ -326,47 +304,26 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     }
 
     onIsAtEndChange(true);
-    syncStickToBottomEnabled(true);
     const frameId = window.requestAnimationFrame(() => {
       void listRef.current?.scrollToEnd?.({ animated: false });
     });
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [listRef, onIsAtEndChange, rows.length, syncStickToBottomEnabled]);
-
-  useEffect(() => {
-    syncStickToBottomEnabled(true);
-  }, [routeThreadKey, syncStickToBottomEnabled]);
+  }, [listRef, onIsAtEndChange, rows.length]);
 
   useEffect(() => {
     if (stickToBottomRequestId === 0) {
       return;
     }
-
-    syncStickToBottomEnabled(true);
     onIsAtEndChange(true);
-
-    let firstFrameId: number | null = null;
-    let secondFrameId: number | null = null;
-    firstFrameId = window.requestAnimationFrame(() => {
-      firstFrameId = null;
+    const frameId = window.requestAnimationFrame(() => {
       void listRef.current?.scrollToEnd?.({ animated: false });
-      secondFrameId = window.requestAnimationFrame(() => {
-        secondFrameId = null;
-        void listRef.current?.scrollToEnd?.({ animated: false });
-      });
     });
-
     return () => {
-      if (firstFrameId !== null) {
-        window.cancelAnimationFrame(firstFrameId);
-      }
-      if (secondFrameId !== null) {
-        window.cancelAnimationFrame(secondFrameId);
-      }
+      window.cancelAnimationFrame(frameId);
     };
-  }, [listRef, onIsAtEndChange, stickToBottomRequestId, syncStickToBottomEnabled]);
+  }, [listRef, onIsAtEndChange, stickToBottomRequestId]);
 
   const sharedState = useMemo<TimelineRowSharedState>(
     () => ({
@@ -437,15 +394,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           renderItem={renderItem}
           estimatedItemSize={90}
           initialScrollAtEnd
-          maintainScrollAtEnd={stickToBottomEnabled && !foldToggleSettling}
-          // LegendList's default "at end" threshold is 10% of the viewport,
-          // which can keep re-pinning the list after the user has already
-          // started scrolling away during streaming. Keep it effectively pixel-
-          // sized so manual scrolls break out immediately.
-          maintainScrollAtEndThreshold={0.001}
+          maintainScrollAtEnd={!foldToggleSettling}
+          maintainScrollAtEndThreshold={0.1}
           maintainVisibleContentPosition
           onScroll={handleScroll}
-          className="timeline-scrollport scrollbar-gutter-both h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
+          className="scrollbar-gutter-both h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
           ListHeaderComponent={TIMELINE_LIST_HEADER}
           ListFooterComponent={TIMELINE_LIST_FOOTER}
         />
@@ -468,7 +421,6 @@ type TimelineWorkEntry = Extract<MessagesTimelineRow, { kind: "work" }>["grouped
 type TimelineRow = MessagesTimelineRow;
 
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
-  const ctx = use(TimelineRowCtx);
   return (
     <div
       className={cn(
@@ -492,11 +444,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
         <AssistantTimelineRow row={row} />
       ) : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
-      {row.kind === "goal" ? (
-        <GoalTimelineRow row={row} timestampFormat={ctx.timestampFormat} />
-      ) : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
-      {row.kind === "turn-diff" ? <TurnDiffTimelineRow row={row} /> : null}
     </div>
   );
 });
@@ -628,34 +576,20 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
 
 function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-fold" }> }) {
   const ctx = use(TimelineRowCtx);
+  const Icon = row.expanded ? ChevronDownIcon : ChevronRightIcon;
 
   return (
-    <div className="border-b border-border/60 pt-1">
+    <div className="border-b border-border/60 pb-2 pt-1">
       <button
         type="button"
         aria-expanded={row.expanded}
         data-scroll-anchor-ignore
         onClick={() => ctx.onToggleTurnFold(row.turnId)}
-        className="flex w-full cursor-pointer select-none items-center gap-1 rounded-md px-1 py-1 text-left text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
         <span>{row.label}</span>
-        <ChevronRightIcon
-          className={cn(
-            "size-3.5 transition-transform duration-200 ease-out motion-reduce:transition-none",
-            row.expanded && "rotate-90",
-          )}
-        />
+        <Icon className="size-3.5" />
       </button>
-      <AnimatedHeight open={row.expanded}>
-        <div
-          aria-hidden={!row.expanded}
-          className="ms-2 mt-0.5 overflow-hidden border-s border-border/45 pb-2 ps-3"
-        >
-          {row.hiddenRows.map((hiddenRow) => (
-            <TimelineRowContent key={hiddenRow.id} row={hiddenRow} />
-          ))}
-        </div>
-      </AnimatedHeight>
     </div>
   );
 }
@@ -688,16 +622,10 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
                 <TooltipTrigger
                   render={<p className="text-muted-foreground text-xs tabular-nums" />}
                 >
-                  {formatShortTimestamp(
-                    row.message.completedAt ?? row.message.createdAt,
-                    ctx.timestampFormat,
-                  )}
+                  {formatShortTimestamp(row.message.updatedAt, ctx.timestampFormat)}
                 </TooltipTrigger>
                 <TooltipPopup>
-                  {formatChatTimestampTooltip(
-                    row.message.completedAt ?? row.message.createdAt,
-                    ctx.timestampFormat,
-                  )}
+                  {formatChatTimestampTooltip(row.message.updatedAt, ctx.timestampFormat)}
                 </TooltipPopup>
               </Tooltip>
             )}
@@ -746,33 +674,21 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
   return (
     <div className="py-0.5 pl-1.5">
       <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70 tabular-nums">
-        <span className="working-text-shimmer">
+        <span className="inline-flex items-center gap-[3px]">
+          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
+          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
+          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
+        </span>
+        <span>
           {row.createdAt ? (
             <>
               Working for <WorkingTimer createdAt={row.createdAt} />
             </>
           ) : (
-            "Working"
+            "Working..."
           )}
         </span>
       </div>
-    </div>
-  );
-}
-
-/** The active turn's changed-files diff, hoisted out of its assistant message
- *  row so it always renders below the turn's commands and working indicator.
- *  Settled turns render their diff inline beneath the terminal message instead. */
-function TurnDiffTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-diff" }> }) {
-  const ctx = use(TimelineRowCtx);
-  return (
-    <div className="min-w-0 px-1 py-0.5">
-      <AssistantChangedFilesSection
-        turnSummary={row.turnSummary}
-        routeThreadKey={ctx.routeThreadKey}
-        resolvedTheme={ctx.resolvedTheme}
-        onOpenTurnDiff={ctx.onOpenTurnDiff}
-      />
     </div>
   );
 }
@@ -835,7 +751,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
     ? nonEmptyEntries.length === 1
       ? "1 tool call"
       : `${nonEmptyEntries.length} tool calls`
-    : "work log";
+    : "Work Log";
 
   useLayoutEffect(() => {
     const anchorBottomBeforeToggle = anchorBottomBeforeToggleRef.current;
@@ -980,7 +896,7 @@ function AssistantChangedFilesSectionInner({
 
   return (
     <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
+      <div className="sticky top-2 z-10 mb-1.5 flex items-center justify-between gap-2 bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:content-['']">
         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
           <span>Changed files ({changedFileCountLabel})</span>
           {hasNonZeroStat(summaryStat) && (

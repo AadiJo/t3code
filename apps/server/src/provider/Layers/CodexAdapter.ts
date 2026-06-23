@@ -15,7 +15,6 @@ import {
   type ProviderEvent,
   ProviderInstanceId,
   type ProviderRuntimeEvent,
-  type ProviderSession,
   type ProviderRequestKind,
   type ThreadTokenUsageSnapshot,
   type ProviderUserInputAnswers,
@@ -27,7 +26,6 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Crypto from "effect/Crypto";
-import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
@@ -191,11 +189,6 @@ function normalizeCodexTokenUsage(
   };
 }
 
-function normalizeNonNegativeInt(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.trunc(value));
-}
-
 function toTurnStatus(
   value: EffectCodexSchema.V2TurnCompletedNotification["turn"]["status"] | "cancelled",
 ): "completed" | "failed" | "cancelled" | "interrupted" {
@@ -289,13 +282,6 @@ function itemDetail(item: CodexLifecycleItem): string | undefined {
     return trimmed;
   }
   return undefined;
-}
-
-function itemMessagePhase(item: CodexLifecycleItem): "commentary" | "final_answer" | undefined {
-  if (!("phase" in item)) {
-    return undefined;
-  }
-  return item.phase === "commentary" || item.phase === "final_answer" ? item.phase : undefined;
 }
 
 function toRequestTypeFromMethod(method: string): CanonicalRequestType {
@@ -495,9 +481,6 @@ function mapItemLifecycle(
       ...(status ? { status } : {}),
       ...(itemTitle(itemType, item) ? { title: itemTitle(itemType, item) } : {}),
       ...(detail ? { detail } : {}),
-      ...(itemType === "assistant_message" && itemMessagePhase(item)
-        ? { messagePhase: itemMessagePhase(item) }
-        : {}),
       ...(event.payload !== undefined ? { data: event.payload } : {}),
     },
   };
@@ -757,46 +740,6 @@ function mapToRuntimeEvents(
         payload: {
           usage: normalizedUsage,
         },
-      },
-    ];
-  }
-
-  if (event.method === "thread/goal/updated") {
-    const payload = readPayload(EffectCodexSchema.V2ThreadGoalUpdatedNotification, event.payload);
-    const objective = trimText(payload?.goal.objective);
-    if (!payload || !objective) {
-      return [];
-    }
-    return [
-      {
-        type: "thread.goal.updated",
-        ...runtimeEventBase(event, canonicalThreadId),
-        payload: {
-          objective,
-          status: payload.goal.status,
-          tokensUsed: normalizeNonNegativeInt(payload.goal.tokensUsed),
-          tokenBudget:
-            payload.goal.tokenBudget == null
-              ? null
-              : normalizeNonNegativeInt(payload.goal.tokenBudget),
-          timeUsedSeconds: normalizeNonNegativeInt(payload.goal.timeUsedSeconds),
-          createdAtEpochMsOrSeconds: payload.goal.createdAt,
-          updatedAtEpochMsOrSeconds: payload.goal.updatedAt,
-        },
-      },
-    ];
-  }
-
-  if (event.method === "thread/goal/cleared") {
-    const payload = readPayload(EffectCodexSchema.V2ThreadGoalClearedNotification, event.payload);
-    if (!payload) {
-      return [];
-    }
-    return [
-      {
-        type: "thread.goal.cleared",
-        ...runtimeEventBase(event, canonicalThreadId),
-        payload: {},
       },
     ];
   }
@@ -1422,12 +1365,8 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     options?.nativeEventLogger === undefined ? nativeEventLogger : undefined;
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
   const sessions = new Map<ThreadId, CodexAdapterSessionContext>();
-  const pendingSessionStarts = new Map<
-    ThreadId,
-    Deferred.Deferred<ProviderSession, ProviderAdapterError>
-  >();
 
-  const startSessionUncached: CodexAdapterShape["startSession"] = (input) =>
+  const startSession: CodexAdapterShape["startSession"] = (input) =>
     Effect.scoped(
       Effect.gen(function* () {
         if (input.provider !== undefined && input.provider !== PROVIDER) {
@@ -1447,27 +1386,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           input.modelSelection?.instanceId === boundInstanceId
             ? getCodexServiceTierOptionValue(input.modelSelection)
             : undefined;
-        const reasoningEffort =
-          input.modelSelection?.instanceId === boundInstanceId
-            ? getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort")
-            : undefined;
         const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
-        const appServerArgs = [
-          "-c",
-          'mcp_servers.node_repl.command="node"',
-          "-c",
-          "mcp_servers.node_repl.enabled=false",
-          ...(mcpSession
-            ? [
-                "-c",
-                `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
-                "-c",
-                'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
-              ]
-            : []),
-          ...(reasoningEffort ? ["-c", `model_reasoning_effort="${reasoningEffort}"`] : []),
-          ...(serviceTier ? ["-c", `service_tier="${serviceTier}"`] : []),
-        ];
         const runtimeInput: CodexSessionRuntimeOptions = {
           threadId: input.threadId,
           providerInstanceId: boundInstanceId,
@@ -1489,9 +1408,14 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                   ...(options?.environment ?? process.env),
                   T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
                 },
+                appServerArgs: [
+                  "-c",
+                  `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
+                  "-c",
+                  'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+                ],
               }
             : {}),
-          appServerArgs,
         };
         const sessionScope = yield* Scope.make("sequential");
         let sessionScopeTransferred = false;
@@ -1529,7 +1453,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             }
             yield* Queue.offerAll(runtimeEventQueue, runtimeEvents);
           }),
-        ).pipe(Effect.forkIn(sessionScope));
+        ).pipe(Effect.forkChild);
 
         const started = yield* runtime.start().pipe(
           Effect.mapError(
@@ -1562,27 +1486,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         return started;
       }),
     );
-
-  const startSession: CodexAdapterShape["startSession"] = (input) =>
-    Effect.gen(function* () {
-      const pending = pendingSessionStarts.get(input.threadId);
-      if (pending) {
-        return yield* Deferred.await(pending);
-      }
-
-      const deferred = yield* Deferred.make<ProviderSession, ProviderAdapterError>();
-      pendingSessionStarts.set(input.threadId, deferred);
-
-      return yield* startSessionUncached(input).pipe(
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            if (pendingSessionStarts.get(input.threadId) === deferred) {
-              pendingSessionStarts.delete(input.threadId);
-            }
-          }).pipe(Effect.andThen(Deferred.done(deferred, exit))),
-        ),
-      );
-    });
 
   const resolveAttachment = Effect.fn("resolveAttachment")(function* (
     input: ProviderSendTurnInput,
@@ -1645,7 +1548,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           : {}),
         ...(serviceTier ? { serviceTier } : {}),
         ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
-        ...(input.deliveryMode !== undefined ? { deliveryMode: input.deliveryMode } : {}),
         ...(codexAttachments.length > 0 ? { attachments: codexAttachments } : {}),
       })
       .pipe(Effect.mapError((cause) => mapCodexRuntimeError(input.threadId, "turn/start", cause)));
@@ -1669,16 +1571,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         cause._tag === "ProviderAdapterSessionNotFoundError"
           ? cause
           : mapCodexRuntimeError(threadId, "turn/interrupt", cause),
-      ),
-    );
-
-  const sendGoalRequest: NonNullable<CodexAdapterShape["sendGoalRequest"]> = (threadId, request) =>
-    requireSession(threadId).pipe(
-      Effect.flatMap((session) => session.runtime.sendGoalRequest(request)),
-      Effect.mapError((cause) =>
-        cause._tag === "ProviderAdapterSessionNotFoundError"
-          ? cause
-          : mapCodexRuntimeError(threadId, "thread/goal", cause),
       ),
     );
 
@@ -1806,7 +1698,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     startSession,
     sendTurn,
     interruptTurn,
-    sendGoalRequest,
     readThread,
     rollbackThread,
     respondToRequest,

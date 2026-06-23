@@ -5,19 +5,7 @@ import {
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
-  type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
-
-function flattenTimelineRows(rows: ReadonlyArray<MessagesTimelineRow>): MessagesTimelineRow[] {
-  const flattened: MessagesTimelineRow[] = [];
-  for (const row of rows) {
-    flattened.push(row);
-    if (row.kind === "turn-fold") {
-      flattened.push(...flattenTimelineRows(row.hiddenRows));
-    }
-  }
-  return flattened;
-}
 
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {
@@ -26,7 +14,8 @@ describe("computeMessageDurationStart", () => {
         id: "a1",
         role: "assistant",
         createdAt: "2026-01-01T00:00:05Z",
-        completedAt: "2026-01-01T00:00:10Z",
+        updatedAt: "2026-01-01T00:00:10Z",
+        streaming: false,
       },
     ]);
     expect(result).toEqual(new Map([["a1", "2026-01-01T00:00:05Z"]]));
@@ -34,12 +23,19 @@ describe("computeMessageDurationStart", () => {
 
   it("uses the user message createdAt for the first assistant response", () => {
     const result = computeMessageDurationStart([
-      { id: "u1", role: "user", createdAt: "2026-01-01T00:00:00Z" },
+      {
+        id: "u1",
+        role: "user",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        streaming: false,
+      },
       {
         id: "a1",
         role: "assistant",
         createdAt: "2026-01-01T00:00:30Z",
-        completedAt: "2026-01-01T00:00:30Z",
+        updatedAt: "2026-01-01T00:00:30Z",
+        streaming: false,
       },
     ]);
 
@@ -51,20 +47,28 @@ describe("computeMessageDurationStart", () => {
     );
   });
 
-  it("uses the previous assistant completedAt for subsequent assistant responses", () => {
+  it("uses the previous completed assistant updatedAt for subsequent assistant responses", () => {
     const result = computeMessageDurationStart([
-      { id: "u1", role: "user", createdAt: "2026-01-01T00:00:00Z" },
+      {
+        id: "u1",
+        role: "user",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        streaming: false,
+      },
       {
         id: "a1",
         role: "assistant",
         createdAt: "2026-01-01T00:00:30Z",
-        completedAt: "2026-01-01T00:00:30Z",
+        updatedAt: "2026-01-01T00:00:30Z",
+        streaming: false,
       },
       {
         id: "a2",
         role: "assistant",
         createdAt: "2026-01-01T00:00:55Z",
-        completedAt: "2026-01-01T00:00:55Z",
+        updatedAt: "2026-01-01T00:00:55Z",
+        streaming: false,
       },
     ]);
 
@@ -77,15 +81,28 @@ describe("computeMessageDurationStart", () => {
     );
   });
 
-  it("does not advance the boundary for a streaming message without completedAt", () => {
+  it("does not advance the boundary for a streaming message", () => {
     const result = computeMessageDurationStart([
-      { id: "u1", role: "user", createdAt: "2026-01-01T00:00:00Z" },
-      { id: "a1", role: "assistant", createdAt: "2026-01-01T00:00:30Z" },
+      {
+        id: "u1",
+        role: "user",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        streaming: false,
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        createdAt: "2026-01-01T00:00:30Z",
+        updatedAt: "2026-01-01T00:00:40Z",
+        streaming: true,
+      },
       {
         id: "a2",
         role: "assistant",
         createdAt: "2026-01-01T00:00:55Z",
-        completedAt: "2026-01-01T00:00:55Z",
+        updatedAt: "2026-01-01T00:00:55Z",
+        streaming: false,
       },
     ]);
 
@@ -100,19 +117,33 @@ describe("computeMessageDurationStart", () => {
 
   it("resets the boundary on a new user message", () => {
     const result = computeMessageDurationStart([
-      { id: "u1", role: "user", createdAt: "2026-01-01T00:00:00Z" },
+      {
+        id: "u1",
+        role: "user",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        streaming: false,
+      },
       {
         id: "a1",
         role: "assistant",
         createdAt: "2026-01-01T00:00:30Z",
-        completedAt: "2026-01-01T00:00:30Z",
+        updatedAt: "2026-01-01T00:00:30Z",
+        streaming: false,
       },
-      { id: "u2", role: "user", createdAt: "2026-01-01T00:01:00Z" },
+      {
+        id: "u2",
+        role: "user",
+        createdAt: "2026-01-01T00:01:00Z",
+        updatedAt: "2026-01-01T00:01:00Z",
+        streaming: false,
+      },
       {
         id: "a2",
         role: "assistant",
         createdAt: "2026-01-01T00:01:20Z",
-        completedAt: "2026-01-01T00:01:20Z",
+        updatedAt: "2026-01-01T00:01:20Z",
+        streaming: false,
       },
     ]);
 
@@ -128,13 +159,26 @@ describe("computeMessageDurationStart", () => {
 
   it("handles system messages without affecting the boundary", () => {
     const result = computeMessageDurationStart([
-      { id: "u1", role: "user", createdAt: "2026-01-01T00:00:00Z" },
-      { id: "s1", role: "system", createdAt: "2026-01-01T00:00:01Z" },
+      {
+        id: "u1",
+        role: "user",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        streaming: false,
+      },
+      {
+        id: "s1",
+        role: "system",
+        createdAt: "2026-01-01T00:00:01Z",
+        updatedAt: "2026-01-01T00:00:01Z",
+        streaming: false,
+      },
       {
         id: "a1",
         role: "assistant",
         createdAt: "2026-01-01T00:00:30Z",
-        completedAt: "2026-01-01T00:00:30Z",
+        updatedAt: "2026-01-01T00:00:30Z",
+        streaming: false,
       },
     ]);
 
@@ -230,6 +274,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Write a poem",
             turnId: null,
             createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
             streaming: false,
           },
         },
@@ -243,7 +288,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "I should ground this first.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:10Z",
-            completedAt: "2026-01-01T00:00:11Z",
+            updatedAt: "2026-01-01T00:00:11Z",
             streaming: false,
           },
         },
@@ -257,7 +302,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Here is the poem.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:20Z",
-            completedAt: "2026-01-01T00:00:30Z",
+            updatedAt: "2026-01-01T00:00:30Z",
             streaming: false,
           },
         },
@@ -269,7 +314,7 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = flattenTimelineRows(rows).filter(
+    const assistantRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );
@@ -292,7 +337,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Earlier response.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:10Z",
-            completedAt: "2026-01-01T00:00:11Z",
+            updatedAt: "2026-01-01T00:00:11Z",
             streaming: false,
           },
         },
@@ -306,7 +351,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Active response.",
             turnId: "turn-2" as never,
             createdAt: "2026-01-01T00:00:20Z",
-            completedAt: "2026-01-01T00:00:30Z",
+            updatedAt: "2026-01-01T00:00:30Z",
             streaming: false,
           },
         },
@@ -323,7 +368,7 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = flattenTimelineRows(rows).filter(
+    const assistantRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );
@@ -338,7 +383,9 @@ describe("deriveMessagesTimelineRows", () => {
       completedAt: "2026-01-01T00:00:30Z",
       assistantMessageId: "assistant-1" as never,
       checkpointTurnCount: 2,
-      files: [{ path: "src/index.ts", additions: 3, deletions: 1 }],
+      checkpointRef: "checkpoint-1" as never,
+      status: "ready" as const,
+      files: [{ path: "src/index.ts", kind: "modified", additions: 3, deletions: 1 }],
     };
 
     const rows = deriveMessagesTimelineRows({
@@ -353,6 +400,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Do the thing",
             turnId: null,
             createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
             streaming: false,
           },
         },
@@ -366,7 +414,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Done",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:20Z",
-            completedAt: "2026-01-01T00:00:30Z",
+            updatedAt: "2026-01-01T00:00:30Z",
             streaming: false,
           },
         },
@@ -392,72 +440,6 @@ describe("deriveMessagesTimelineRows", () => {
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
 
-  it("hoists the active turn's diff into a trailing row below commands and the working indicator", () => {
-    const activeTurnDiffSummary = {
-      turnId: "turn-1" as never,
-      completedAt: "2026-01-01T00:00:30Z",
-      assistantMessageId: "assistant-1" as never,
-      checkpointTurnCount: 1,
-      files: [{ path: "src/index.ts", additions: 3, deletions: 1 }],
-    };
-
-    const rows = deriveMessagesTimelineRows({
-      timelineEntries: [
-        {
-          id: "assistant-entry",
-          kind: "message",
-          createdAt: "2026-01-01T00:00:20Z",
-          message: {
-            id: "assistant-1" as never,
-            role: "assistant",
-            text: "Patch is in.",
-            turnId: "turn-1" as never,
-            createdAt: "2026-01-01T00:00:20Z",
-            completedAt: "2026-01-01T00:00:21Z",
-            streaming: false,
-          },
-        },
-        {
-          id: "work-entry-1",
-          kind: "work",
-          createdAt: "2026-01-01T00:00:25Z",
-          entry: {
-            id: "work-1",
-            createdAt: "2026-01-01T00:00:25Z",
-            turnId: "turn-1" as never,
-            label: "Ran command",
-            tone: "tool" as const,
-          },
-        },
-      ],
-      latestTurn: {
-        turnId: "turn-1" as never,
-        state: "running",
-        startedAt: "2026-01-01T00:00:00Z",
-        completedAt: null,
-      },
-      isWorking: true,
-      activeTurnStartedAt: "2026-01-01T00:00:00Z",
-      turnDiffSummaryByAssistantMessageId: new Map([
-        ["assistant-1" as never, activeTurnDiffSummary],
-      ]),
-      revertTurnCountByUserMessageId: new Map(),
-    });
-
-    expect(rows.map((row) => row.id)).toEqual([
-      "assistant-entry",
-      "work-entry-1",
-      "working-indicator-row",
-      "turn-diff:turn-1",
-    ]);
-    const assistantRow = rows.find((row) => row.id === "assistant-entry");
-    expect(assistantRow?.kind === "message" && assistantRow.assistantTurnDiffSummary).toBe(
-      undefined,
-    );
-    const diffRow = rows.find((row) => row.id === "turn-diff:turn-1");
-    expect(diffRow).toMatchObject({ kind: "turn-diff", turnSummary: activeTurnDiffSummary });
-  });
-
   it("folds settled-turn commentary and work behind a Worked-for row", () => {
     const timelineEntries = [
       {
@@ -470,6 +452,7 @@ describe("deriveMessagesTimelineRows", () => {
           text: "Build it",
           turnId: null,
           createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
           streaming: false,
         },
       },
@@ -483,7 +466,7 @@ describe("deriveMessagesTimelineRows", () => {
           text: "Looking around first.",
           turnId: "turn-1" as never,
           createdAt: "2026-01-01T00:00:05Z",
-          completedAt: "2026-01-01T00:00:06Z",
+          updatedAt: "2026-01-01T00:00:06Z",
           streaming: false,
         },
       },
@@ -509,7 +492,7 @@ describe("deriveMessagesTimelineRows", () => {
           text: "Done",
           turnId: "turn-1" as never,
           createdAt: "2026-01-01T00:00:20Z",
-          completedAt: "2026-01-01T00:00:22Z",
+          updatedAt: "2026-01-01T00:00:22Z",
           streaming: false,
         },
       },
@@ -529,7 +512,7 @@ describe("deriveMessagesTimelineRows", () => {
     );
     expect(foldRow?.turnId).toBe("turn-1");
     expect(foldRow?.expanded).toBe(false);
-    // User message boundary (00:00:00) → terminal message completedAt (00:00:22).
+    // User message boundary (00:00:00) → terminal message updatedAt (00:00:22).
     expect(foldRow?.label).toBe("Worked for 22s");
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
@@ -549,24 +532,20 @@ describe("deriveMessagesTimelineRows", () => {
     expect(expandedRows.map((row) => row.id)).toEqual([
       "user-entry",
       "turn-fold:turn-1",
-      "assistant-final-entry",
-    ]);
-    const expandedFoldRow = expandedRows.find(
-      (row): row is Extract<(typeof expandedRows)[number], { kind: "turn-fold" }> =>
-        row.kind === "turn-fold",
-    );
-    expect(expandedFoldRow?.expanded).toBe(true);
-    expect(expandedFoldRow?.hiddenRows.map((row) => row.id)).toEqual([
       "assistant-thought-entry",
       "work-entry-1",
+      "assistant-final-entry",
     ]);
+    expect(
+      expandedRows.find((row) => row.kind === "turn-fold" && row.expanded === true),
+    ).toBeDefined();
   });
 
   it("derives a sane duration for a steer-superseded turn with one instant commentary message", () => {
     // A steer ends the previous turn early: its only message completes the
     // instant it is created, and trailing work entries land after it. The
     // fold duration must span from the user message that started the turn to
-    // the last entry, not message createdAt → message completedAt (~0ms).
+    // the last entry, not message createdAt → message updatedAt (~0ms).
     const rows = deriveMessagesTimelineRows({
       timelineEntries: [
         {
@@ -579,6 +558,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "do it once more",
             turnId: null,
             createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
             streaming: false,
           },
         },
@@ -592,7 +572,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Kicking off call 1.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:09Z",
-            completedAt: "2026-01-01T00:00:09Z",
+            updatedAt: "2026-01-01T00:00:09Z",
             streaming: false,
           },
         },
@@ -618,6 +598,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "actually do 15",
             turnId: null,
             createdAt: "2026-01-01T00:00:14Z",
+            updatedAt: "2026-01-01T00:00:14Z",
             streaming: false,
           },
         },
@@ -631,6 +612,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "One down — adjusting.",
             turnId: "turn-2" as never,
             createdAt: "2026-01-01T00:00:17Z",
+            updatedAt: "2026-01-01T00:00:17Z",
             streaming: true,
           },
         },
@@ -721,7 +703,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Done",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:20Z",
-            completedAt: "2026-01-01T00:00:22Z",
+            updatedAt: "2026-01-01T00:00:22Z",
             streaming: false,
           },
         },
@@ -735,6 +717,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "yooo",
             turnId: null,
             createdAt: "2026-01-01T00:01:00Z",
+            updatedAt: "2026-01-01T00:01:00Z",
             streaming: false,
           },
         },
@@ -759,36 +742,6 @@ describe("deriveMessagesTimelineRows", () => {
     ]);
     const finalRow = rows.find((row) => row.id === "assistant-final-entry");
     expect(finalRow?.kind === "message" && finalRow.showAssistantMeta).toBe(true);
-    const workingRow = rows.find((row) => row.id === "working-indicator-row");
-    expect(workingRow).toMatchObject({
-      kind: "working",
-      createdAt: "2026-01-01T00:01:00Z",
-      phase: "starting",
-    });
-  });
-
-  it("uses the explicit running phase for optimistic turn starts", () => {
-    const rows = deriveMessagesTimelineRows({
-      timelineEntries: [],
-      latestTurn: {
-        turnId: "turn-1" as never,
-        state: "completed",
-        startedAt: "2026-01-01T00:00:00Z",
-        completedAt: "2026-01-01T00:00:22Z",
-      },
-      isWorking: true,
-      workingPhase: "running",
-      activeTurnStartedAt: "2026-01-01T00:01:00Z",
-      turnDiffSummaryByAssistantMessageId: new Map(),
-      revertTurnCountByUserMessageId: new Map(),
-    });
-
-    const workingRow = rows.find((row) => row.id === "working-indicator-row");
-    expect(workingRow).toMatchObject({
-      kind: "working",
-      createdAt: "2026-01-01T00:01:00Z",
-      phase: "running",
-    });
   });
 
   it("does not fold the active in-progress turn", () => {
@@ -804,7 +757,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Working on it.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:05Z",
-            completedAt: "2026-01-01T00:00:06Z",
+            updatedAt: "2026-01-01T00:00:06Z",
             streaming: false,
           },
         },
@@ -839,81 +792,6 @@ describe("deriveMessagesTimelineRows", () => {
       "work-entry-1",
       "working-indicator-row",
     ]);
-    const workingRow = rows.find((row) => row.id === "working-indicator-row");
-    expect(workingRow).toMatchObject({
-      kind: "working",
-      createdAt: "2026-01-01T00:00:00Z",
-      phase: "running",
-    });
-  });
-
-  it("folds active-turn commentary once the final answer starts streaming", () => {
-    const rows = deriveMessagesTimelineRows({
-      timelineEntries: [
-        {
-          id: "assistant-commentary-entry",
-          kind: "message",
-          createdAt: "2026-01-01T00:00:05Z",
-          message: {
-            id: "assistant-commentary" as never,
-            role: "assistant",
-            text: "Checking the repo.",
-            turnId: "turn-1" as never,
-            phase: "commentary",
-            createdAt: "2026-01-01T00:00:05Z",
-            completedAt: "2026-01-01T00:00:06Z",
-            streaming: false,
-          },
-        },
-        {
-          id: "work-entry-1",
-          kind: "work",
-          createdAt: "2026-01-01T00:00:08Z",
-          entry: {
-            id: "work-1",
-            createdAt: "2026-01-01T00:00:08Z",
-            turnId: "turn-1" as never,
-            label: "Ran command",
-            tone: "tool" as const,
-          },
-        },
-        {
-          id: "assistant-final-entry",
-          kind: "message",
-          createdAt: "2026-01-01T00:00:20Z",
-          message: {
-            id: "assistant-final" as never,
-            role: "assistant",
-            text: "The answer is streaming",
-            turnId: "turn-1" as never,
-            phase: "final_answer",
-            createdAt: "2026-01-01T00:00:20Z",
-            streaming: true,
-          },
-        },
-      ],
-      latestTurn: {
-        turnId: "turn-1" as never,
-        state: "running",
-        startedAt: "2026-01-01T00:00:00Z",
-        completedAt: null,
-      },
-      isWorking: true,
-      activeTurnStartedAt: "2026-01-01T00:00:00Z",
-      turnDiffSummaryByAssistantMessageId: new Map(),
-      revertTurnCountByUserMessageId: new Map(),
-    });
-
-    expect(rows.map((row) => row.id)).toEqual([
-      "turn-fold:turn-1",
-      "assistant-final-entry",
-      "working-indicator-row",
-    ]);
-    const foldRow = rows.find(
-      (row): row is Extract<(typeof rows)[number], { kind: "turn-fold" }> =>
-        row.kind === "turn-fold",
-    );
-    expect(foldRow?.expanded).toBe(false);
   });
 
   it("only shows assistant metadata on the terminal assistant message", () => {
@@ -929,7 +807,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Checking first.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:10Z",
-            completedAt: "2026-01-01T00:00:11Z",
+            updatedAt: "2026-01-01T00:00:11Z",
             streaming: false,
           },
         },
@@ -943,7 +821,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Done.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:20Z",
-            completedAt: "2026-01-01T00:00:30Z",
+            updatedAt: "2026-01-01T00:00:30Z",
             streaming: false,
           },
         },
@@ -955,7 +833,7 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = flattenTimelineRows(rows).filter(
+    const assistantRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );
@@ -976,7 +854,7 @@ describe("deriveMessagesTimelineRows", () => {
             text: "Working on it.",
             turnId: "turn-1" as never,
             createdAt: "2026-01-01T00:00:10Z",
-            completedAt: "2026-01-01T00:00:11Z",
+            updatedAt: "2026-01-01T00:00:11Z",
             streaming: false,
           },
         },
@@ -1011,6 +889,7 @@ describe("computeStableMessagesTimelineRows", () => {
       text: "First",
       turnId: null,
       createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
       streaming: false,
     };
     const secondUserMessage = {
@@ -1019,6 +898,7 @@ describe("computeStableMessagesTimelineRows", () => {
       text: "Second",
       turnId: null,
       createdAt: "2026-01-01T00:00:10Z",
+      updatedAt: "2026-01-01T00:00:10Z",
       streaming: false,
     };
 
@@ -1114,6 +994,7 @@ describe("computeStableMessagesTimelineRows", () => {
       text: "First",
       turnId: null,
       createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
       streaming: false,
     };
     const secondUserMessage = {
@@ -1122,6 +1003,7 @@ describe("computeStableMessagesTimelineRows", () => {
       text: "Second",
       turnId: null,
       createdAt: "2026-01-01T00:00:10Z",
+      updatedAt: "2026-01-01T00:00:10Z",
       streaming: false,
     };
 
