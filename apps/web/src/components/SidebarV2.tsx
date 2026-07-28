@@ -917,7 +917,7 @@ const SidebarV2Row = memo(function SidebarV2Row(props: {
                 {props.settlementSupported || showSnoozeButton ? (
                   <span
                     className={cn(
-                      "absolute inset-y-0 right-0 z-10 isolate flex items-stretch gap-0.5 rounded-md pl-1 opacity-0 shadow-[-8px_0_14px_-12px_rgb(0_0_0/80%)] transition-opacity before:pointer-events-none before:absolute before:inset-y-0 before:-left-5 before:z-0 before:w-6 before:bg-gradient-to-r before:from-transparent focus-within:opacity-100 group-hover/v2-row:opacity-100 [&>button]:relative [&>button]:z-10",
+                      "absolute inset-y-0 right-0 z-10 isolate flex items-stretch gap-0.5 rounded-md pl-1 opacity-0 shadow-[-8px_0_14px_-12px_rgb(0_0_0/80%)] transition-opacity before:pointer-events-none before:absolute before:inset-y-0 before:-left-5 before:z-0 before:w-6 before:bg-gradient-to-r before:from-transparent focus-within:opacity-100 group-hover/v2-row:opacity-100 group-focus-within/v2-row:opacity-100 [&>button]:relative [&>button]:z-10",
                       props.isActive
                         ? "bg-sidebar-row-active before:to-sidebar-row-active dark:bg-[color-mix(in_srgb,var(--foreground)_11%,var(--sidebar))] dark:before:to-[color-mix(in_srgb,var(--foreground)_11%,var(--sidebar))]"
                         : isSelected
