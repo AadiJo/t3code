@@ -156,9 +156,10 @@ function bucketCheckRollupEntry(entry: GitHubCheckRollupEntry): CheckBucket {
 
   const result = (entry.conclusion ?? entry.state)?.trim().toUpperCase();
   if (result === undefined || result.length === 0) {
-    // A StatusContext with no state, or a completed CheckRun with no
-    // conclusion, tells us nothing actionable.
-    return isCheckRun ? "neutral" : "pending";
+    // Nothing actionable: a StatusContext with no state, a completed CheckRun
+    // with no conclusion, or an entry shape we don't recognize at all. Reading
+    // these as pending would strand the indicator on amber indefinitely.
+    return "neutral";
   }
   if (FAILED_CHECK_RESULTS.has(result)) return "failed";
   if (PENDING_CHECK_RESULTS.has(result)) return "pending";
@@ -168,8 +169,10 @@ function bucketCheckRollupEntry(entry: GitHubCheckRollupEntry): CheckBucket {
 
 /**
  * Rolls check entries into the single state the sidebar renders. Returns null
- * when there is nothing to say (no CI configured on the repo), which the UI
- * reads as "draw no dot".
+ * when there is nothing to say — no CI configured, or a suite that reached no
+ * verdict at all (every check skipped, neutral, or an unrecognized shape) —
+ * which the UI reads as "draw no dot". A suite that nothing passed must not
+ * render green just because nothing failed either.
  */
 export function summarizeGitHubCheckRollup(
   entries: ReadonlyArray<GitHubCheckRollupEntry>,
@@ -195,6 +198,10 @@ export function summarizeGitHubCheckRollup(
       case "neutral":
         break;
     }
+  }
+
+  if (failed === 0 && pending === 0 && passed === 0) {
+    return null;
   }
 
   // A failure is the actionable signal, so it outranks work still in flight.

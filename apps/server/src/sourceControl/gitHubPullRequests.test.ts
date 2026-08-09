@@ -50,8 +50,6 @@ describe("summarizeGitHubCheckRollup", () => {
   });
 
   it("counts skipped and neutral checks toward the total but not the verdict", () => {
-    // An all-skipped suite is not an endorsement, so it must not read green
-    // off the back of checks that never ran.
     expect(
       summarizeGitHubCheckRollup([
         checkRun({ conclusion: "SKIPPED" }),
@@ -61,22 +59,46 @@ describe("summarizeGitHubCheckRollup", () => {
     ).toEqual({ state: "success", total: 3, passed: 1, failed: 0, pending: 0 });
   });
 
+  it("reports no signal when nothing passed, failed, or is pending", () => {
+    // An all-skipped suite is not an endorsement: green here would claim the
+    // work is verified when no check actually ran.
+    expect(
+      summarizeGitHubCheckRollup([
+        checkRun({ conclusion: "SKIPPED" }),
+        checkRun({ conclusion: "NEUTRAL" }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("does not strand the indicator on pending for a stateless status context", () => {
+    // A StatusContext with no state never resolves, so treating it as pending
+    // would leave an amber dot up forever.
+    expect(summarizeGitHubCheckRollup([statusContext(null)])).toBeNull();
+  });
+
+  it("keeps a real verdict when a stateless entry sits alongside it", () => {
+    expect(
+      summarizeGitHubCheckRollup([statusContext(null), checkRun({ conclusion: "SUCCESS" })]),
+    ).toEqual({ state: "success", total: 2, passed: 1, failed: 0, pending: 0 });
+  });
+
   it("maps every terminal failure conclusion to failed", () => {
     for (const conclusion of ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"]) {
       expect(summarizeGitHubCheckRollup([checkRun({ conclusion })])?.state).toBe("failure");
     }
   });
 
-  it("does not turn an unrecognized conclusion into a failure", () => {
-    // A conclusion GitHub adds later must never light the indicator red on
-    // its own; it lands in the neutral bucket instead.
-    expect(summarizeGitHubCheckRollup([checkRun({ conclusion: "SOMETHING_NEW" })])).toEqual({
-      state: "success",
-      total: 1,
-      passed: 0,
-      failed: 0,
-      pending: 0,
-    });
+  it("does not turn an unrecognized conclusion into a failure or a pass", () => {
+    // A conclusion GitHub adds later must never light the indicator red on its
+    // own, and must not read green either: it lands in the neutral bucket, so
+    // on its own it produces no signal at all.
+    expect(summarizeGitHubCheckRollup([checkRun({ conclusion: "SOMETHING_NEW" })])).toBeNull();
+    expect(
+      summarizeGitHubCheckRollup([
+        checkRun({ conclusion: "SOMETHING_NEW" }),
+        checkRun({ conclusion: "FAILURE" }),
+      ])?.state,
+    ).toBe("failure");
   });
 
   it("returns null when the rollup is empty so no indicator renders", () => {
