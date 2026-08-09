@@ -19,6 +19,8 @@ import { relayEnvironmentDiscovery } from "~/state/relay";
 import { useRelayEnvironmentDiscovery } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
+import { EnvironmentOsIcon } from "../EnvironmentOsIcon";
+import { resolveEnvironmentOs } from "../settings/ConnectionsSettings.logic";
 import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "../settings/itemRows";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
@@ -171,7 +173,7 @@ export function CloudEnvironmentConnectRows({
     return empty;
   }
 
-  return visibleEnvironments.map(({ environment, availability, error }) => {
+  return visibleEnvironments.map(({ environment, availability, status, error }) => {
     const savedEnvironment = savedById.get(environment.environmentId);
     const savedConnection = savedEnvironment
       ? presentSavedCloudEnvironmentConnection(savedEnvironment.connection)
@@ -226,6 +228,11 @@ export function CloudEnvironmentConnectRows({
                 }
               />
               <p className="truncate text-sm font-medium">{environment.label}</p>
+              <EnvironmentOsIcon
+                os={resolveEnvironmentOs({
+                  discoveredDescriptor: Option.getOrNull(status)?.descriptor ?? null,
+                })}
+              />
             </div>
             <p
               className={cn(
