@@ -83,9 +83,28 @@ describe("summarizeGitHubCheckRollup", () => {
   });
 
   it("maps every terminal failure conclusion to failed", () => {
-    for (const conclusion of ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"]) {
+    for (const conclusion of [
+      "FAILURE",
+      "ERROR",
+      "TIMED_OUT",
+      "CANCELLED",
+      "STARTUP_FAILURE",
+      "ACTION_REQUIRED",
+      "STALE",
+    ]) {
       expect(summarizeGitHubCheckRollup([checkRun({ conclusion })])?.state).toBe("failure");
     }
+  });
+
+  it("does not let a stale check hide behind passing ones", () => {
+    // GitHub marks stuck runs stale. That is not a success and can block merge,
+    // so a suite carrying one must not render green.
+    expect(
+      summarizeGitHubCheckRollup([
+        checkRun({ conclusion: "SUCCESS" }),
+        checkRun({ conclusion: "STALE" }),
+      ]),
+    ).toEqual({ state: "failure", total: 2, passed: 1, failed: 1, pending: 0 });
   });
 
   it("does not turn an unrecognized conclusion into a failure or a pass", () => {

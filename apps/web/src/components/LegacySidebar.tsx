@@ -695,11 +695,15 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
                       checks={prChecks}
                       className="size-3"
                       // Mirrors resolveThreadRowClassName's surfaces so the
-                      // dot's ring matches whatever the row is painting.
+                      // dot's ring matches whatever the row is painting. A
+                      // selected-but-inactive row uses row-selected, which is a
+                      // different color from row-active on several themes.
                       ringClass={
-                        isActive || isSelected
+                        isActive
                           ? "ring-sidebar-row-active"
-                          : "ring-sidebar group-hover/menu-sub-item:ring-sidebar-row-hover"
+                          : isSelected
+                            ? "ring-sidebar-row-selected group-hover/menu-sub-item:ring-sidebar-row-active"
+                            : "ring-sidebar group-hover/menu-sub-item:ring-sidebar-row-hover"
                       }
                     />
                   </button>

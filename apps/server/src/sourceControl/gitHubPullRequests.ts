@@ -123,7 +123,13 @@ const GitHubCheckRollupEntrySchema = Schema.Struct({
 
 type GitHubCheckRollupEntry = Schema.Schema.Type<typeof GitHubCheckRollupEntrySchema>;
 
-/** Conclusions and states that mean the check is done and unhappy. */
+/**
+ * Conclusions and states that mean the check is done and unhappy. This covers
+ * every non-success `CheckConclusionState` except the two GitHub treats as
+ * "no opinion" (NEUTRAL, SKIPPED). STALE belongs here: GitHub marks a stuck run
+ * stale, it is not a success, and it can block merge — so it must not read as
+ * green.
+ */
 const FAILED_CHECK_RESULTS = new Set([
   "FAILURE",
   "ERROR",
@@ -131,6 +137,7 @@ const FAILED_CHECK_RESULTS = new Set([
   "CANCELLED",
   "STARTUP_FAILURE",
   "ACTION_REQUIRED",
+  "STALE",
 ]);
 /** States that mean the check has not reached a verdict yet. */
 const PENDING_CHECK_RESULTS = new Set(["PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING"]);
