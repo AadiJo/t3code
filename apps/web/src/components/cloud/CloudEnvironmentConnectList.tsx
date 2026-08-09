@@ -8,7 +8,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId, ServerConfig } from "@t3tools/contracts";
 import type { RelayClientEnvironmentRecord } from "@t3tools/contracts/relay";
 import * as Option from "effect/Option";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
@@ -30,6 +30,7 @@ import { presentSavedCloudEnvironmentConnection } from "./cloudEnvironmentConnec
 export interface SavedCloudEnvironmentConnection {
   readonly environmentId: EnvironmentId;
   readonly connection: EnvironmentConnectionPresentation;
+  readonly serverConfig: ServerConfig | null;
 }
 
 export function RemoteEnvironmentRowsSkeleton() {
@@ -230,6 +231,7 @@ export function CloudEnvironmentConnectRows({
               <p className="truncate text-sm font-medium">{environment.label}</p>
               <EnvironmentOsIcon
                 os={resolveEnvironmentOs({
+                  serverConfig: savedEnvironment?.serverConfig ?? null,
                   discoveredDescriptor: Option.getOrNull(status)?.descriptor ?? null,
                 })}
               />
