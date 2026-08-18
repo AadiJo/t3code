@@ -6,6 +6,7 @@ import {
   decodeOriginPullRequestJson,
   decodeOriginPullRequestListJson,
   originNameWithOwnerFromGitUrl,
+  originWebRepositoryUrl,
 } from "./originPullRequests.ts";
 
 describe("decodeOriginPullRequestJson", () => {
@@ -136,6 +137,14 @@ describe("originNameWithOwnerFromGitUrl", () => {
     );
     expect(originNameWithOwnerFromGitUrl("https://origin.cursor.com/acme/checkout.git")).toBe(
       "acme/checkout",
+    );
+  });
+});
+
+describe("originWebRepositoryUrl", () => {
+  it("builds the Origin codebase page, not the git host", () => {
+    expect(originWebRepositoryUrl("acme/checkout")).toBe(
+      "https://cursor.com/codebase/acme/checkout",
     );
   });
 });

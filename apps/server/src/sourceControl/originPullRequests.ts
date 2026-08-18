@@ -258,3 +258,11 @@ export function originHttpsCloneUrl(nameWithOwner: string): string {
 export function originSshCloneUrl(nameWithOwner: string): string {
   return `git@${ORIGIN_GIT_HOST}:${nameWithOwner}.git`;
 }
+
+export function originGitHttpsUrl(nameWithOwner: string): string {
+  return originHttpsCloneUrl(nameWithOwner).replace(/\.git$/u, "");
+}
+
+export function originWebRepositoryUrl(nameWithOwner: string): string {
+  return `${ORIGIN_WEB_BASE}/${nameWithOwner}`;
+}

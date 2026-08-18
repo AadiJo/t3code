@@ -143,7 +143,7 @@ describe("OriginCli.layer", () => {
 
       assert.deepStrictEqual(result, {
         nameWithOwner: "acme/checkout",
-        url: "https://origin.cursor.com/acme/checkout",
+        url: "https://cursor.com/codebase/acme/checkout",
         sshUrl: "git@origin.cursor.com:acme/checkout.git",
       });
       expect(mockRun).toHaveBeenNthCalledWith(1, {

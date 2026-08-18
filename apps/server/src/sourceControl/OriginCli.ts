@@ -15,12 +15,11 @@ import {
 
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import {
-  ORIGIN_GIT_HOST,
   ORIGIN_PULL_REQUEST_JSON_FIELDS,
   decodeOriginPullRequestJson,
   decodeOriginPullRequestListJson,
-  originHttpsCloneUrl,
   originSshCloneUrl,
+  originWebRepositoryUrl,
 } from "./originPullRequests.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -294,15 +293,15 @@ function normalizeRepositoryCloneUrls(
   const nameWithOwner = nameWithOwnerFromView(raw, repository);
   return {
     nameWithOwner,
-    url: raw.cloneUrl ?? originHttpsCloneUrl(nameWithOwner).replace(/\.git$/u, ""),
+    url: originWebRepositoryUrl(nameWithOwner),
     sshUrl: raw.sshUrl ?? originSshCloneUrl(nameWithOwner),
   };
 }
 
 /**
  * `origin repo create` prints clone instructions on stdout. Prefer a parsed
- * HTTPS URL when the CLI emits one; otherwise derive GitHub-shaped Origin
- * clone URLs from the requested `owner/repo`.
+ * owner/repo from an HTTPS URL when the CLI emits one; the returned `url` is
+ * the Origin codebase page so "Open" lands on the product, not the git host.
  */
 function deriveRepositoryCloneUrlsFromCreateOutput(
   stdout: string,
@@ -319,7 +318,7 @@ function deriveRepositoryCloneUrlsFromCreateOutput(
         const nameWithOwner = `${segments.at(-2)}/${segments.at(-1)}`;
         return {
           nameWithOwner,
-          url: `https://${ORIGIN_GIT_HOST}/${nameWithOwner}`,
+          url: originWebRepositoryUrl(nameWithOwner),
           sshUrl: originSshCloneUrl(nameWithOwner),
         };
       }
@@ -329,7 +328,7 @@ function deriveRepositoryCloneUrlsFromCreateOutput(
   }
   return {
     nameWithOwner: repository,
-    url: `https://${ORIGIN_GIT_HOST}/${repository}`,
+    url: originWebRepositoryUrl(repository),
     sshUrl: originSshCloneUrl(repository),
   };
 }
