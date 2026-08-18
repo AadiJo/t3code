@@ -32,7 +32,13 @@ import {
   GlobeIcon,
 } from "lucide-react";
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
-import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "~/components/Icons";
+import {
+  AzureDevOpsIcon,
+  BitbucketIcon,
+  CursorIcon,
+  GitHubIcon,
+  GitLabIcon,
+} from "~/components/Icons";
 import { RadioGroup } from "~/components/ui/radio-group";
 import { Spinner } from "~/components/ui/spinner";
 import { cn } from "~/lib/utils";
@@ -115,7 +121,7 @@ interface PendingDefaultBranchAction {
 
 type PublishProviderKind = Extract<
   SourceControlProviderKind,
-  "github" | "gitlab" | "bitbucket" | "azure-devops"
+  "github" | "gitlab" | "bitbucket" | "azure-devops" | "cursor-origin"
 >;
 
 type GitActionToastId = ReturnType<typeof toastManager.add>;
@@ -194,6 +200,14 @@ const PUBLISH_PROVIDER_OPTIONS = [
     host: "dev.azure.com",
     pathPlaceholder: "project/repository",
     Icon: AzureDevOpsIcon,
+  },
+  {
+    value: "cursor-origin",
+    label: "Cursor Origin",
+    description: "origin.cursor.com",
+    host: "origin.cursor.com",
+    pathPlaceholder: "owner/repo",
+    Icon: CursorIcon,
   },
 ] as const satisfies ReadonlyArray<{
   readonly value: PublishProviderKind;
@@ -416,6 +430,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
       gitlab: null,
       bitbucket: null,
       "azure-devops": null,
+      "cursor-origin": null,
     };
     for (const provider of sourceControlDiscovery.data?.sourceControlProviders ?? []) {
       if (isPublishProviderKind(provider.kind)) {
@@ -496,7 +511,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
       const result = await publishRepositoryAction.run({
         provider: publishProvider,
         repository: publishRepository.trim(),
-        visibility: publishVisibility,
+        visibility: publishProvider === "cursor-origin" ? "private" : publishVisibility,
         remoteName: publishRemoteName.trim() || "origin",
         protocol: publishProtocol,
       });
@@ -622,8 +637,12 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                 <RadioGroup
                   value={publishProvider}
                   onValueChange={(value) => {
-                    setSelectedPublishProvider(value as PublishProviderKind);
+                    const next = value as PublishProviderKind;
+                    setSelectedPublishProvider(next);
                     setPublishRepositoryOverride(null);
+                    if (next === "cursor-origin") {
+                      setPublishVisibility("private");
+                    }
                   }}
                   aria-labelledby="publish-provider-cards-label"
                   className="grid grid-cols-2 gap-2.5"
@@ -739,21 +758,32 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                     }
                     aria-labelledby="publish-visibility-cards-label"
                     disabled={publishRepositoryAction.isPending}
-                    className="grid grid-cols-2 gap-2.5"
+                    className={
+                      publishProvider === "cursor-origin"
+                        ? "grid grid-cols-1 gap-2.5"
+                        : "grid grid-cols-2 gap-2.5"
+                    }
                   >
                     {[
                       {
                         value: "private" as const,
                         label: "Private",
-                        description: "Only invited people",
+                        description:
+                          publishProvider === "cursor-origin"
+                            ? "Shared with your Origin codebase"
+                            : "Only invited people",
                         Icon: LockIcon,
                       },
-                      {
-                        value: "public" as const,
-                        label: "Public",
-                        description: "Anyone on the web",
-                        Icon: GlobeIcon,
-                      },
+                      ...(publishProvider === "cursor-origin"
+                        ? []
+                        : [
+                            {
+                              value: "public" as const,
+                              label: "Public",
+                              description: "Anyone on the web",
+                              Icon: GlobeIcon,
+                            },
+                          ]),
                     ].map((option) => {
                       const isSelected = publishVisibility === option.value;
                       return (
