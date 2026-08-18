@@ -95,6 +95,36 @@ it.effect("lists Origin pull requests with updatedAt from CLI JSON", () =>
   }),
 );
 
+it.effect("passes the remote repository identity into Origin PR lookups", () =>
+  Effect.gen(function* () {
+    type ListPullRequestsInput = Parameters<OriginCli.OriginCli["Service"]["listPullRequests"]>[0];
+    let listInput: ListPullRequestsInput | undefined;
+    const provider = yield* makeProvider({
+      listPullRequests: (input: ListPullRequestsInput) => {
+        listInput = input;
+        return Effect.succeed([]);
+      },
+    });
+
+    yield* provider.listChangeRequests({
+      cwd: "/repo",
+      headSelector: "feature/origin",
+      state: "open",
+      context: {
+        provider: {
+          kind: "cursor-origin",
+          name: "Cursor Origin",
+          baseUrl: "https://origin.cursor.com",
+        },
+        remoteName: "origin",
+        remoteUrl: "git@origin.cursor.com:acme/checkout.git",
+      },
+    });
+
+    assert.strictEqual(listInput?.nameWithOwner, "acme/checkout");
+  }),
+);
+
 it.effect("adds safe request context while retaining Origin CLI causes", () =>
   Effect.gen(function* () {
     const cause = new OriginCli.OriginPullRequestNotFoundError({
@@ -155,10 +185,32 @@ it("treats a failed Origin auth probe as unauthenticated", () => {
   assert.equal(Option.getOrNull(auth.detail)?.includes("not logged in"), true);
 });
 
+it("does not treat negated Origin login copy as authenticated", () => {
+  const auth = OriginSourceControlProvider.discovery.parseAuth(
+    processResult("Not logged in as theo\n", { exitCode: ChildProcessSpawner.ExitCode(1) }),
+  );
+
+  assert.strictEqual(auth.status, "unauthenticated");
+  assert.equal(Option.getOrNull(auth.account), null);
+});
+
 it("extracts the account from Origin auth status text", () => {
   assert.deepStrictEqual(parseOriginAuthStatus("Logged in as theo\n"), {
     parsed: true,
     host: "origin.cursor.com",
     account: "theo",
+  });
+});
+
+it("does not treat negated Origin auth output as an account", () => {
+  assert.deepStrictEqual(parseOriginAuthStatus("Not logged in as theo\n"), {
+    parsed: false,
+    host: null,
+    account: null,
+  });
+  assert.deepStrictEqual(parseOriginAuthStatus("No account: run origin auth login\n"), {
+    parsed: false,
+    host: null,
+    account: null,
   });
 });

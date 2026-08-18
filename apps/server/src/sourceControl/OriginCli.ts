@@ -219,11 +219,13 @@ export class OriginCli extends Context.Service<
       readonly headSelector: string;
       readonly state: "open" | "closed" | "merged" | "all";
       readonly limit?: number;
+      readonly nameWithOwner?: string;
     }) => Effect.Effect<ReadonlyArray<OriginPullRequestSummary>, OriginCliError>;
 
     readonly getPullRequest: (input: {
       readonly cwd: string;
       readonly reference: string;
+      readonly nameWithOwner?: string;
     }) => Effect.Effect<OriginPullRequestSummary, OriginCliError>;
 
     readonly getRepositoryCloneUrls: (input: {
@@ -370,7 +372,14 @@ export const make = Effect.gen(function* () {
         Effect.flatMap((raw) =>
           raw.length === 0
             ? Effect.succeed([])
-            : Effect.sync(() => decodeOriginPullRequestListJson(raw)).pipe(
+            : Effect.sync(() =>
+                decodeOriginPullRequestListJson(
+                  raw,
+                  input.nameWithOwner === undefined
+                    ? undefined
+                    : { nameWithOwner: input.nameWithOwner },
+                ),
+              ).pipe(
                 Effect.flatMap((decoded) => {
                   if (!Result.isSuccess(decoded)) {
                     return Effect.fail(
@@ -394,7 +403,14 @@ export const make = Effect.gen(function* () {
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
         Effect.flatMap((raw) =>
-          Effect.sync(() => decodeOriginPullRequestJson(raw)).pipe(
+          Effect.sync(() =>
+            decodeOriginPullRequestJson(
+              raw,
+              input.nameWithOwner === undefined
+                ? undefined
+                : { nameWithOwner: input.nameWithOwner },
+            ),
+          ).pipe(
             Effect.flatMap((decoded) => {
               if (!Result.isSuccess(decoded)) {
                 return Effect.fail(

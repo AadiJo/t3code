@@ -42,7 +42,15 @@ const OriginPullRequestSchema = Schema.Struct({
   base: Schema.optional(Schema.NullOr(OriginRef)),
   headRefName: Schema.optional(Schema.NullOr(Schema.String)),
   baseRefName: Schema.optional(Schema.NullOr(Schema.String)),
+  fullName: Schema.optional(Schema.NullOr(Schema.String)),
+  org: Schema.optional(Schema.NullOr(Schema.String)),
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+  repository: Schema.optional(Schema.NullOr(Schema.String)),
 });
+
+export interface OriginPullRequestDecodeOptions {
+  readonly nameWithOwner?: string;
+}
 
 function trimOptionalString(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -100,18 +108,71 @@ function normalizeOriginPullRequestState(input: {
   return "open";
 }
 
+function nameWithOwnerFromPath(path: string): string | null {
+  const segments = path
+    .replace(/\.git$/u, "")
+    .replace(/^\/+|\/+$/gu, "")
+    .split("/")
+    .filter(Boolean);
+  if (segments.length < 2) {
+    return null;
+  }
+  const owner = segments.at(-2);
+  const repo = segments.at(-1);
+  return owner && repo ? `${owner}/${repo}` : null;
+}
+
+export function originNameWithOwnerFromGitUrl(remoteUrl: string): string | null {
+  const trimmed = remoteUrl.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const scpMatch = /^[a-zA-Z0-9._-]+@[^:]+:(.+)$/u.exec(trimmed);
+  if (scpMatch?.[1]) {
+    return nameWithOwnerFromPath(scpMatch[1]);
+  }
+
+  try {
+    return nameWithOwnerFromPath(new URL(trimmed).pathname);
+  } catch {
+    return nameWithOwnerFromPath(trimmed);
+  }
+}
+
+function originNameWithOwnerFromRecord(
+  raw: Schema.Schema.Type<typeof OriginPullRequestSchema>,
+): string | null {
+  const fullName = trimOptionalString(raw.fullName);
+  if (fullName?.includes("/")) {
+    return nameWithOwnerFromPath(fullName);
+  }
+  const repository = trimOptionalString(raw.repository);
+  if (repository?.includes("/")) {
+    return nameWithOwnerFromPath(repository);
+  }
+  const org = trimOptionalString(raw.org);
+  const name = trimOptionalString(raw.name);
+  return org && name ? `${org}/${name}` : null;
+}
+
 function originPullRequestUrl(input: {
   readonly url: string | null;
   readonly number: number;
-}): string {
+  readonly nameWithOwner: string | null;
+}): string | null {
   if (input.url) {
     return input.url;
   }
-  return `${ORIGIN_WEB_BASE}/pull/${input.number}`;
+  if (input.nameWithOwner) {
+    return `${ORIGIN_WEB_BASE}/${input.nameWithOwner}/pull/${input.number}`;
+  }
+  return null;
 }
 
 function normalizeOriginPullRequestRecord(
   raw: Schema.Schema.Type<typeof OriginPullRequestSchema>,
+  options?: OriginPullRequestDecodeOptions,
 ): NormalizedOriginPullRequestRecord | null {
   const number = parsePullRequestNumber(raw.number);
   const headRefName = originRefName(raw.headRefName) ?? refFromField(raw.head);
@@ -120,10 +181,19 @@ function normalizeOriginPullRequestRecord(
     return null;
   }
 
+  const url = originPullRequestUrl({
+    url: trimOptionalString(raw.url),
+    number,
+    nameWithOwner: originNameWithOwnerFromRecord(raw) ?? trimOptionalString(options?.nameWithOwner),
+  });
+  if (url === null) {
+    return null;
+  }
+
   return {
     number,
     title: raw.title,
-    url: originPullRequestUrl({ url: trimOptionalString(raw.url), number }),
+    url,
     baseRefName,
     headRefName,
     state: normalizeOriginPullRequestState(raw),
@@ -139,6 +209,7 @@ export const formatOriginJsonDecodeError = formatSchemaError;
 
 export function decodeOriginPullRequestListJson(
   raw: string,
+  options?: OriginPullRequestDecodeOptions,
 ): Result.Result<
   ReadonlyArray<NormalizedOriginPullRequestRecord>,
   Cause.Cause<Schema.SchemaError>
@@ -151,7 +222,7 @@ export function decodeOriginPullRequestListJson(
       if (Exit.isFailure(decodedEntry)) {
         continue;
       }
-      const normalized = normalizeOriginPullRequestRecord(decodedEntry.value);
+      const normalized = normalizeOriginPullRequestRecord(decodedEntry.value, options);
       if (normalized) {
         pullRequests.push(normalized);
       }
@@ -163,15 +234,18 @@ export function decodeOriginPullRequestListJson(
 
 export function decodeOriginPullRequestJson(
   raw: string,
+  options?: OriginPullRequestDecodeOptions,
 ): Result.Result<NormalizedOriginPullRequestRecord, Cause.Cause<Schema.SchemaError>> {
   const result = decodeOriginPullRequest(raw);
   if (Result.isFailure(result)) {
     return Result.fail(result.failure);
   }
-  const normalized = normalizeOriginPullRequestRecord(result.success);
+  const normalized = normalizeOriginPullRequestRecord(result.success, options);
   if (normalized === null) {
     return Result.fail(
-      Cause.die(new Error("Origin pull request JSON is missing number, head, or base.")),
+      Cause.die(
+        new Error("Origin pull request JSON is missing number, head, base, or repository."),
+      ),
     );
   }
   return Result.succeed(normalized);

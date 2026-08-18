@@ -474,6 +474,8 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
     selectedPublishProvider !== null && publishProviderReadiness[selectedPublishProvider].ready
       ? selectedPublishProvider
       : (firstReadyPublishProvider ?? selectedPublishProvider ?? "github");
+  const effectivePublishVisibility: SourceControlRepositoryVisibility =
+    publishProvider === "cursor-origin" ? "private" : publishVisibility;
   const selectedPublishProviderReadiness = publishProviderReadiness[publishProvider];
   const publishRepositoryPrefill = publishAccountByProvider[publishProvider]
     ? `${publishAccountByProvider[publishProvider]}/`
@@ -511,7 +513,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
       const result = await publishRepositoryAction.run({
         provider: publishProvider,
         repository: publishRepository.trim(),
-        visibility: publishProvider === "cursor-origin" ? "private" : publishVisibility,
+        visibility: effectivePublishVisibility,
         remoteName: publishRemoteName.trim() || "origin",
         protocol: publishProtocol,
       });
@@ -538,7 +540,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
     publishRemoteName,
     publishRepository,
     publishRepositoryAction,
-    publishVisibility,
+    effectivePublishVisibility,
   ]);
 
   const resetState = useCallback(() => {
@@ -640,9 +642,6 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                     const next = value as PublishProviderKind;
                     setSelectedPublishProvider(next);
                     setPublishRepositoryOverride(null);
-                    if (next === "cursor-origin") {
-                      setPublishVisibility("private");
-                    }
                   }}
                   aria-labelledby="publish-provider-cards-label"
                   className="grid grid-cols-2 gap-2.5"
@@ -752,7 +751,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                     Visibility
                   </span>
                   <RadioGroup
-                    value={publishVisibility}
+                    value={effectivePublishVisibility}
                     onValueChange={(value) =>
                       setPublishVisibility(value as SourceControlRepositoryVisibility)
                     }
@@ -785,7 +784,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                             },
                           ]),
                     ].map((option) => {
-                      const isSelected = publishVisibility === option.value;
+                      const isSelected = effectivePublishVisibility === option.value;
                       return (
                         <RadioPrimitive.Root
                           key={option.value}

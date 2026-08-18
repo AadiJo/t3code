@@ -5,6 +5,7 @@ import { SourceControlProviderError, type ChangeRequest } from "@t3tools/contrac
 
 import * as OriginCli from "./OriginCli.ts";
 import { parseOriginAuthStatus } from "./originAuthStatus.ts";
+import { originNameWithOwnerFromGitUrl } from "./originPullRequests.ts";
 import * as SourceControlProvider from "./SourceControlProvider.ts";
 import {
   combinedAuthOutput,
@@ -25,6 +26,16 @@ function toChangeRequest(summary: OriginCli.OriginPullRequestSummary): ChangeReq
     state: summary.state ?? "open",
     updatedAt: summary.updatedAt ?? Option.none(),
   };
+}
+
+function nameWithOwnerFromContext(
+  context: SourceControlProvider.SourceControlProviderContext | undefined,
+): { readonly nameWithOwner: string } | Record<string, never> {
+  if (!context?.remoteUrl) {
+    return {};
+  }
+  const nameWithOwner = originNameWithOwnerFromGitUrl(context.remoteUrl);
+  return nameWithOwner ? { nameWithOwner } : {};
 }
 
 function parseOriginAuth(input: SourceControlAuthProbeInput) {
@@ -79,6 +90,7 @@ export const make = Effect.gen(function* () {
           headSelector: input.headSelector,
           state: input.state,
           ...(input.limit !== undefined ? { limit: input.limit } : {}),
+          ...nameWithOwnerFromContext(input.context),
         })
         .pipe(
           Effect.map((items) => items.map(toChangeRequest)),
@@ -98,23 +110,29 @@ export const make = Effect.gen(function* () {
           ),
         ),
     getChangeRequest: (input) =>
-      origin.getPullRequest(input).pipe(
-        Effect.map(toChangeRequest),
-        Effect.mapError(
-          (error) =>
-            new SourceControlProviderError({
-              provider: "cursor-origin",
-              operation: "getChangeRequest",
-              command: error.command,
-              cwd: input.cwd,
-              reference: SourceControlProvider.transportSafeSourceControlErrorValue(
-                input.reference,
-              ),
-              detail: error.detail,
-              cause: error,
-            }),
+      origin
+        .getPullRequest({
+          cwd: input.cwd,
+          reference: input.reference,
+          ...nameWithOwnerFromContext(input.context),
+        })
+        .pipe(
+          Effect.map(toChangeRequest),
+          Effect.mapError(
+            (error) =>
+              new SourceControlProviderError({
+                provider: "cursor-origin",
+                operation: "getChangeRequest",
+                command: error.command,
+                cwd: input.cwd,
+                reference: SourceControlProvider.transportSafeSourceControlErrorValue(
+                  input.reference,
+                ),
+                detail: error.detail,
+                cause: error,
+              }),
+          ),
         ),
-      ),
     createChangeRequest: (input) =>
       origin
         .createPullRequest({

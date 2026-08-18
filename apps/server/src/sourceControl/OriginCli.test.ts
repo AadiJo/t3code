@@ -96,6 +96,34 @@ describe("OriginCli.layer", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("rebuilds Origin pull request URLs from the repository identity", () =>
+    Effect.gen(function* () {
+      mockRun.mockReturnValueOnce(
+        Effect.succeed(
+          processOutput(
+            // @effect-diagnostics-next-line preferSchemaOverJson:off
+            JSON.stringify({
+              number: 13,
+              title: "Add Origin provider",
+              status: "open",
+              head: { ref: "feature/origin" },
+              base: { ref: "main" },
+            }),
+          ),
+        ),
+      );
+
+      const origin = yield* OriginCli.OriginCli;
+      const result = yield* origin.getPullRequest({
+        cwd: "/repo",
+        reference: "13",
+        nameWithOwner: "acme/checkout",
+      });
+
+      assert.strictEqual(result.url, "https://cursor.com/codebase/acme/checkout/pull/13");
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("creates repositories without a visibility flag", () =>
     Effect.gen(function* () {
       mockRun.mockReturnValueOnce(

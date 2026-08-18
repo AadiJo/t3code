@@ -21,10 +21,10 @@ function firstMatch(text: string, patterns: ReadonlyArray<RegExp>): RegExpExecAr
 
 export function parseOriginAuthStatus(text: string): OriginAuthStatus {
   const loggedIn = firstMatch(text, [
-    /Logged in to ([^\s]+) as\s+([^\s(]+)/iu,
-    /Logged in as\s+([^\s(]+)/iu,
-    /Authenticated as\s+([^\s(]+)/iu,
-    /account:\s*([^\s(]+)/iu,
+    /^[ \t]*Logged in to ([^\s]+) as\s+([^\s(]+)[ \t]*$/imu,
+    /^[ \t]*Logged in as\s+([^\s(]+)[ \t]*$/imu,
+    /^[ \t]*Authenticated as\s+([^\s(]+)[ \t]*$/imu,
+    /^[ \t]*account:\s*([^\s(]+)[ \t]*$/imu,
   ]);
 
   if (!loggedIn) {

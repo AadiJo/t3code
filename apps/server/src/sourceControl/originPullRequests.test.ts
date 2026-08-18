@@ -5,6 +5,7 @@ import * as Result from "effect/Result";
 import {
   decodeOriginPullRequestJson,
   decodeOriginPullRequestListJson,
+  originNameWithOwnerFromGitUrl,
 } from "./originPullRequests.ts";
 
 describe("decodeOriginPullRequestJson", () => {
@@ -70,5 +71,71 @@ describe("decodeOriginPullRequestListJson", () => {
     if (!Result.isSuccess(decoded)) return;
     expect(decoded.success).toHaveLength(1);
     expect(decoded.success[0]?.number).toBe(1);
+  });
+
+  it("rebuilds Origin web URLs from the repository identity when url is omitted", () => {
+    const decoded = decodeOriginPullRequestListJson(
+      JSON.stringify([
+        {
+          number: 13,
+          title: "Missing url",
+          status: "open",
+          head: "feature/origin",
+          base: "main",
+        },
+      ]),
+      { nameWithOwner: "acme/checkout" },
+    );
+
+    expect(Result.isSuccess(decoded)).toBe(true);
+    if (!Result.isSuccess(decoded)) return;
+    expect(decoded.success[0]?.url).toBe("https://cursor.com/codebase/acme/checkout/pull/13");
+  });
+
+  it("rebuilds Origin web URLs from JSON org and name", () => {
+    const decoded = decodeOriginPullRequestJson(
+      JSON.stringify({
+        number: 4,
+        title: "From org fields",
+        status: "open",
+        head: "feature/org",
+        base: "main",
+        org: "acme",
+        name: "checkout",
+      }),
+    );
+
+    expect(Result.isSuccess(decoded)).toBe(true);
+    if (!Result.isSuccess(decoded)) return;
+    expect(decoded.success.url).toBe("https://cursor.com/codebase/acme/checkout/pull/4");
+  });
+
+  it("drops rows that cannot form a valid Origin pull request URL", () => {
+    const decoded = decodeOriginPullRequestListJson(
+      JSON.stringify([
+        {
+          number: 13,
+          title: "Missing url and repo",
+          status: "open",
+          head: "feature/origin",
+          base: "main",
+        },
+      ]),
+    );
+
+    expect(Result.isSuccess(decoded)).toBe(true);
+    if (!Result.isSuccess(decoded)) return;
+    expect(decoded.success).toHaveLength(0);
+  });
+});
+
+describe("originNameWithOwnerFromGitUrl", () => {
+  it("reads owner and repo from Origin clone URLs", () => {
+    expect(originNameWithOwnerFromGitUrl("git@origin.cursor.com:acme/checkout.git")).toBe(
+      "acme/checkout",
+    );
+    expect(originNameWithOwnerFromGitUrl("https://origin.cursor.com/acme/checkout.git")).toBe(
+      "acme/checkout",
+    );
   });
 });
