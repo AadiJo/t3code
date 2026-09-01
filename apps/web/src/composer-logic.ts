@@ -248,7 +248,7 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 
   const tokenStart = tokenStartForCursor(text, cursor);
   const token = text.slice(tokenStart, cursor);
-  if (token.startsWith("/")) {
+  if (token.startsWith("/") && (token.startsWith("/skill:") || "/skill:".startsWith(token))) {
     return {
       kind: "slash-command",
       query: token.slice(1),

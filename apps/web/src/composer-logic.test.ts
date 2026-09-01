@@ -149,6 +149,26 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it.each(["/", "/sk", "/skill:"])("detects partial inline slash skill token %s", (token) => {
+    const text = `Use ${token}`;
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: token.slice(1),
+      rangeStart: "Use ".length,
+      rangeEnd: text.length,
+    });
+  });
+
+  it.each(["/tmp/build.sh", "/etc/hosts", "/unslop"])(
+    "keeps ordinary inline slash token %s as text",
+    (token) => {
+      const text = `Use ${token}`;
+
+      expect(detectComposerTrigger(text, text.length)).toBeNull();
+    },
+  );
+
   it("detects $skill trigger at cursor", () => {
     const text = "Use $gh-fi";
     const trigger = detectComposerTrigger(text, text.length);
