@@ -177,7 +177,7 @@ describe("searchSlashCommandItems", () => {
     ]);
   });
 
-  it("hides skills from slash completion after the first message line", () => {
+  it("keeps only skills in slash completion away from a line start", () => {
     const items = [
       {
         id: "slash:model",
@@ -203,7 +203,7 @@ describe("searchSlashCommandItems", () => {
     >;
 
     expect(slashCommandItemsForPromptPosition(items, false).map((item) => item.id)).toEqual([
-      "slash:model",
+      "skill:claudeAgent:unslop",
     ]);
     expect(slashCommandItemsForPromptPosition(items, true).map((item) => item.id)).toEqual([
       "slash:model",

@@ -1362,7 +1362,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       }));
       const slashCommandItems = slashCommandItemsForPromptPosition(
         [...builtInSlashCommandItems, ...providerSlashCommandItems, ...skillItems],
-        composerTrigger.rangeStart === 0,
+        composerTrigger.rangeStart === 0 || prompt[composerTrigger.rangeStart - 1] === "\n",
       );
       return searchSlashCommandItems(slashCommandItems, query);
     }

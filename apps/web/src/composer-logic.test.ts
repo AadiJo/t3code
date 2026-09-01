@@ -137,6 +137,18 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("detects a slash skill token in the middle of a message", () => {
+    const text = "Use /skill:unslop";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "skill:unslop",
+      rangeStart: "Use ".length,
+      rangeEnd: text.length,
+    });
+  });
+
   it("detects $skill trigger at cursor", () => {
     const text = "Use $gh-fi";
     const trigger = detectComposerTrigger(text, text.length);

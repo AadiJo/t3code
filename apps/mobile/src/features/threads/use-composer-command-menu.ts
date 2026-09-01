@@ -85,6 +85,8 @@ export function useComposerCommandMenu({
 
     if (trigger.kind === "slash-command") {
       const q = trigger.query.toLowerCase();
+      const isAtLineStart =
+        trigger.rangeStart === 0 || draftMessage[trigger.rangeStart - 1] === "\n";
       const allBuiltIn = [
         {
           id: "cmd:model",
@@ -108,14 +110,16 @@ export function useComposerCommandMenu({
           description: "Switch to default mode",
         },
       ];
-      const builtIn = allBuiltIn.filter(
-        (item) =>
-          item.command.includes(q) &&
-          (item.command === "model" || onUpdateInteractionMode !== undefined),
-      );
+      const builtIn = isAtLineStart
+        ? allBuiltIn.filter(
+            (item) =>
+              item.command.includes(q) &&
+              (item.command === "model" || onUpdateInteractionMode !== undefined),
+          )
+        : [];
 
       const providerCommands: ComposerCommandItem[] = [];
-      for (const command of selectedProviderStatus?.slashCommands ?? []) {
+      for (const command of isAtLineStart ? (selectedProviderStatus?.slashCommands ?? []) : []) {
         if (!command.name.toLowerCase().includes(q)) continue;
         // Codex feedback uploads an existing thread's session and logs.
         if (

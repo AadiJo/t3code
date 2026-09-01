@@ -14,12 +14,12 @@ type SlashSearchItem = Extract<
 
 export function slashCommandItemsForPromptPosition(
   items: ReadonlyArray<SlashSearchItem>,
-  isAtPromptStart: boolean,
+  isAtLineStart: boolean,
 ): SlashSearchItem[] {
-  if (isAtPromptStart) {
+  if (isAtLineStart) {
     return [...items];
   }
-  return items.filter((item) => item.type !== "skill");
+  return items.filter((item) => item.type === "skill");
 }
 
 function scoreSlashCommandItem(item: SlashSearchItem, query: string): number | null {

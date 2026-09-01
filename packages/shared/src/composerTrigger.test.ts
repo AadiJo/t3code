@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { serializeComposerFileLink, serializeComposerMentionPath } from "./composerTrigger.ts";
+import {
+  detectComposerTrigger,
+  serializeComposerFileLink,
+  serializeComposerMentionPath,
+} from "./composerTrigger.ts";
+
+describe("detectComposerTrigger", () => {
+  it("detects a slash skill token in the middle of a message", () => {
+    const text = "Use /skill:unslop";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: "skill:unslop",
+      rangeStart: "Use ".length,
+      rangeEnd: text.length,
+    });
+  });
+});
 
 describe("serializeComposerMentionPath", () => {
   it("keeps simple mention paths unquoted", () => {
