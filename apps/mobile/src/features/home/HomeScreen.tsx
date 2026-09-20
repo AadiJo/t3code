@@ -24,6 +24,12 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Platform, View } from "react-native";
+import Animated, {
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -155,6 +161,48 @@ function HomeTopContentSpacer() {
 /* ─── Main screen ────────────────────────────────────────────────────── */
 
 export function HomeScreen(props: HomeScreenProps) {
+  const [loadingDelayElapsed, setLoadingDelayElapsed] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const opacity = useSharedValue(0);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  const hasContent =
+    props.threads.some((thread) => thread.archivedAt === null) || props.pendingTasks.length > 0;
+  const loading = deriveEmptyState({
+    catalogState: props.catalogState,
+    projectCount: props.projects.length,
+  }).loading;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoadingDelayElapsed(true), 1_000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Content can appear immediately; only startup loading text waits a second.
+  // Once revealed, reconnects must not hide the screen or restart the fade.
+  if (!revealed && (loadingDelayElapsed || hasContent || !loading)) {
+    setRevealed(true);
+  }
+  useEffect(() => {
+    if (revealed) {
+      opacity.set(withTiming(1, { duration: 250, reduceMotion: ReduceMotion.System }));
+    }
+  }, [revealed, opacity]);
+
+  return (
+    <View className="flex-1 bg-screen">
+      <Animated.View
+        style={[{ flex: 1 }, animatedStyle]}
+        pointerEvents={revealed ? "auto" : "none"}
+        accessibilityElementsHidden={!revealed}
+        importantForAccessibility={revealed ? "auto" : "no-hide-descendants"}
+      >
+        <HomeScreenContent {...props} />
+      </Animated.View>
+    </View>
+  );
+}
+
+function HomeScreenContent(props: HomeScreenProps) {
   const [groupDisplayStates, setGroupDisplayStates] = useState<
     ReadonlyMap<string, HomeGroupDisplayState>
   >(() => new Map());
