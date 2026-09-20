@@ -98,6 +98,7 @@ import { useLegacyPlanModeState } from "./use-legacy-plan-mode-enabled";
 import {
   resolveNewTaskBranchWorktreePath,
   resolveNewTaskLocalWorkspaceSelection,
+  resolveNewTaskWorkspaceSelection,
 } from "./new-task-context-presentation";
 import { resolveEnvironmentProjectMatch } from "./new-task-project-selection";
 import { resolveProjectThreadCreationBranch } from "./projectThreadCreationValidation";
@@ -145,6 +146,7 @@ type NewTaskFlowContextValue = {
   readonly selectedProjectKey: string | null;
   readonly selectedModelKey: string | null;
   readonly workspaceMode: WorkspaceMode;
+  readonly isRepository: boolean | null;
   readonly selectedBranchName: string | null;
   readonly selectedWorktreePath: string | null;
   readonly startFromOrigin: boolean;
@@ -463,9 +465,6 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     projectSetting: projectThreadEnvMode,
     projectFilePending: t3ProjectFileQuery.isPending,
   });
-  const workspaceMode = selectedProjectDraft.workspaceSelection?.mode ?? defaultWorkspaceMode;
-  const selectedBranchName = selectedProjectDraft.workspaceSelection?.branch ?? null;
-  const selectedWorktreePath = selectedProjectDraft.workspaceSelection?.worktreePath ?? null;
   // Keep the user's explicit choice separate from the resolved display value:
   // only the explicit flag is ever written back to the draft, so the resolved
   // value keeps tracking the server setting when the config loads late.
@@ -674,6 +673,17 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
         })
       : null,
   );
+  const isRepository = projectGitStatus.data?.isRepo ?? branchState.data?.isRepo ?? null;
+  const {
+    mode: workspaceMode,
+    branch: selectedBranchName,
+    worktreePath: selectedWorktreePath,
+  } = resolveNewTaskWorkspaceSelection({
+    isRepository,
+    mode: selectedProjectDraft.workspaceSelection?.mode ?? defaultWorkspaceMode,
+    branch: selectedProjectDraft.workspaceSelection?.branch ?? null,
+    worktreePath: selectedProjectDraft.workspaceSelection?.worktreePath ?? null,
+  });
   const currentCheckoutBranchName = projectGitStatus.data?.refName ?? null;
 
   const filteredBranches = useMemo(() => {
@@ -970,10 +980,13 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       if (text.length === 0 || !draftModelSelection) {
         return null;
       }
-      const workspaceSelection = draft.workspaceSelection;
-      // Fall back to the resolved mode (server default) so queued tasks drain
-      // with the same mode the composer displayed.
-      const mode = workspaceSelection?.mode ?? workspaceMode;
+      const workspaceSelection = resolveNewTaskWorkspaceSelection({
+        isRepository,
+        mode: draft.workspaceSelection?.mode ?? workspaceMode,
+        branch: draft.workspaceSelection?.branch ?? null,
+        worktreePath: draft.workspaceSelection?.worktreePath ?? null,
+      });
+      const mode = workspaceSelection.mode;
       // When the selection is the stand-in built from the queued snapshot,
       // persist the original (possibly absent) snapshot values — the
       // stand-in's placeholder title/workspaceRoot must never be written back
@@ -1015,14 +1028,14 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
           // guess would pin a stale label to a thread that ran somewhere else.
           branch: resolveProjectThreadCreationBranch({
             workspaceMode: mode,
-            selectedBranch: workspaceSelection?.branch ?? null,
+            selectedBranch: workspaceSelection.branch,
             currentCheckoutBranch: options?.currentCheckoutBranch ?? null,
           }),
-          worktreePath: mode === "worktree" ? null : (workspaceSelection?.worktreePath ?? null),
+          worktreePath: mode === "worktree" ? null : workspaceSelection.worktreePath,
           // The draft only carries the flag when the user touched it; fall
           // back to the resolved default (server settings) so queued tasks
           // drain with the same origin mode the composer displayed.
-          ...((workspaceSelection?.startFromOrigin ?? startFromOrigin)
+          ...((draft.workspaceSelection?.startFromOrigin ?? startFromOrigin)
             ? { startFromOrigin: true }
             : {}),
         },
@@ -1031,6 +1044,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
     },
     [
       defaultRuntimeMode,
+      isRepository,
       editingPendingProject,
       editingPendingTask,
       selectedEnvironmentServerConfig,
@@ -1152,6 +1166,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       selectedEnvironmentId,
       selectedProjectKey,
       selectedModelKey,
+      isRepository,
       workspaceMode,
       selectedBranchName,
       selectedWorktreePath,
@@ -1235,6 +1250,7 @@ export function NewTaskFlowProvider(props: React.PropsWithChildren) {
       runtimeMode,
       selectedBranchName,
       hasMoreBranches,
+      isRepository,
       selectedEnvironmentId,
       selectedModel,
       selectedModelKey,

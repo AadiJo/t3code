@@ -122,6 +122,7 @@ import { resolveDraftProjectSelection } from "./new-task-project-selection";
 import {
   resolveNewTaskBranchLabel,
   resolveNewTaskWorkspaceLabel,
+  resolveNewTaskWorkspaceSelection,
 } from "./new-task-context-presentation";
 import { useIncomingShare } from "../sharing/IncomingShareProvider";
 import { selectIncomingShareAttachmentsForServer } from "../sharing/incoming-share-model";
@@ -1185,8 +1186,12 @@ export function NewTaskDraftScreen(props: {
         selectedEnvironmentServerConfig,
         draft.modelSelection ?? null,
       ) ?? flow.selectedModel;
-    const workspaceMode = draft.workspaceSelection?.mode ?? flow.workspaceMode;
-    const selectedBranchName = draft.workspaceSelection?.branch ?? flow.selectedBranchName;
+    const { mode: workspaceMode, branch: selectedBranchName } = resolveNewTaskWorkspaceSelection({
+      isRepository: flow.isRepository,
+      mode: draft.workspaceSelection?.mode ?? flow.workspaceMode,
+      branch: draft.workspaceSelection?.branch ?? flow.selectedBranchName,
+      worktreePath: draft.workspaceSelection?.worktreePath ?? flow.selectedWorktreePath,
+    });
     const initialMessageText = draft.text.trim();
 
     if (
@@ -1587,7 +1592,7 @@ export function NewTaskDraftScreen(props: {
           />
         </View>
       ) : null}
-      <View className="pb-1">{workspaceControls}</View>
+      {flow.isRepository === true ? <View className="pb-1">{workspaceControls}</View> : null}
 
       {modelUnavailable ? (
         <Pressable

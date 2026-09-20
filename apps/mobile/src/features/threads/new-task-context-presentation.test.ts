@@ -1,3 +1,4 @@
+import { resolveNewTaskWorkspaceSelection } from "./new-task-context-presentation";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -124,5 +125,31 @@ describe("resolveNewTaskBranchLabel", () => {
         workspaceMode: "worktree",
       }),
     ).toBe("Choose branch");
+  });
+});
+
+describe("resolveNewTaskWorkspaceSelection", () => {
+  const worktree = { mode: "worktree" as const, branch: "main", worktreePath: "/old-worktree" };
+
+  it("starts in the project directory when a non-repository has a saved worktree choice", () => {
+    expect(resolveNewTaskWorkspaceSelection({ ...worktree, isRepository: false })).toEqual({
+      mode: "local",
+      branch: null,
+      worktreePath: null,
+    });
+  });
+
+  it("clears a saved checkout branch and path for non-repositories", () => {
+    expect(
+      resolveNewTaskWorkspaceSelection({ ...worktree, mode: "local", isRepository: false }),
+    ).toEqual({
+      mode: "local",
+      branch: null,
+      worktreePath: null,
+    });
+  });
+
+  it.each([true, null])("preserves selections when repository status is %s", (isRepository) => {
+    expect(resolveNewTaskWorkspaceSelection({ ...worktree, isRepository })).toEqual(worktree);
   });
 });

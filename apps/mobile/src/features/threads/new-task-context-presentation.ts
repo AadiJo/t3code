@@ -1,5 +1,21 @@
 type WorkspaceMode = "local" | "worktree";
 
+export function resolveNewTaskWorkspaceSelection(input: {
+  readonly isRepository: boolean | null;
+  readonly mode: WorkspaceMode;
+  readonly branch: string | null;
+  readonly worktreePath: string | null;
+}) {
+  if (input.isRepository === false) {
+    return { mode: "local" as const, branch: null, worktreePath: null };
+  }
+  return {
+    mode: input.mode,
+    branch: input.branch,
+    worktreePath: input.worktreePath,
+  };
+}
+
 export function resolveNewTaskWorkspaceLabel(input: {
   readonly workspaceMode: WorkspaceMode;
   readonly worktreePath: string | null;
