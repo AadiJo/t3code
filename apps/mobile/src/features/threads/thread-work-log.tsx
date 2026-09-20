@@ -1146,7 +1146,7 @@ export function ThreadThinkingRow(props: {
         icon="brain"
         iconSubtleColor={props.iconSubtleColor}
         label="Thinking"
-        showIcon
+        showIcon={false}
       />
     </View>
   );
@@ -1187,21 +1187,16 @@ export function ThreadReasoningRow(props: {
             icon="brain"
             iconSubtleColor={props.iconSubtleColor}
             label={props.label}
-            showIcon
+            showIcon={false}
           />
         ) : (
-          <>
-            <View className="h-6 w-6 shrink-0 items-center justify-center">
-              <WorkLogIcon icon="brain" color={props.iconSubtleColor} />
-            </View>
-            <Text
-              key={props.rowSizing.textSizeKey}
-              className="min-w-0 flex-1 text-sm text-foreground-muted"
-              numberOfLines={1}
-            >
-              {props.label}
-            </Text>
-          </>
+          <Text
+            key={props.rowSizing.textSizeKey}
+            className="min-w-0 flex-1 text-sm text-foreground-muted"
+            numberOfLines={1}
+          >
+            {props.label}
+          </Text>
         )}
         <ThreadDisclosureChevron
           expanded={props.expanded}

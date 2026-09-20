@@ -367,6 +367,15 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
         return null;
     }
   })();
+  const pendingSyncKey = threadSyncLabel === null ? null : selectedThreadKey;
+  const [visibleSyncKey, setVisibleSyncKey] = useState<string | null>(null);
+  useEffect(() => {
+    setVisibleSyncKey(null);
+    if (pendingSyncKey === null) return;
+    const timer = setTimeout(() => setVisibleSyncKey(pendingSyncKey), 500);
+    return () => clearTimeout(timer);
+  }, [pendingSyncKey]);
+
   // One floating pill above the composer: it reads the connection phase while
   // disconnected, the sync state while messages load, then the working timer
   // once the feed is settled.
@@ -395,7 +404,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       return null;
     }
     if (threadSyncLabel !== null) {
-      return { kind: "syncing", label: threadSyncLabel };
+      return visibleSyncKey === pendingSyncKey ? { kind: "syncing", label: threadSyncLabel } : null;
     }
     if (props.isCompacting && contentPresentationKind === "ready") {
       return { kind: "compacting" };
