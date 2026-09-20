@@ -269,6 +269,7 @@ export interface ThreadFeedProps {
   readonly layoutVariant?: LayoutVariant;
   readonly usesAutomaticContentInsets?: boolean;
   readonly onHeaderMaterialVisibilityChange?: (visible: boolean) => void;
+  readonly onAtEndChange?: (isAtEnd: boolean) => void;
   readonly onEndFollowEnabledChange?: (enabled: boolean) => void;
   readonly skills?: ReadonlyArray<SelectableMarkdownSkill>;
   readonly onUseArtifactTemplate?: (template: CodexArtifactTemplate) => void;
@@ -2484,6 +2485,15 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       props.listRef.current?.reportContentInset({ bottom });
     }
   }, [listMountKey, props.contentInsetEndAdjustment, props.listRef]);
+
+  // The jump button tracks position, independently of the follow latch that
+  // pauses during every drag, including overscroll beyond the bottom.
+  useEffect(() => {
+    const state = props.listRef.current?.getState();
+    if (!state) return;
+    props.onAtEndChange?.(state.isAtEnd);
+    return state.listen("isAtEnd", (isAtEnd) => props.onAtEndChange?.(isAtEnd));
+  }, [listMountKey, props.contentPresentation.kind, props.listRef, props.onAtEndChange]);
 
   const anchoredEndSpace = useMemo(
     () =>

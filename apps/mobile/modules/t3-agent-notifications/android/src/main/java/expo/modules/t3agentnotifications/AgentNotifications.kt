@@ -77,6 +77,9 @@ object AgentNotifications {
     if (ongoingEnabled && !wasEnabled) prefs.edit().putBoolean("dismissed", false).apply()
     if (!ongoingEnabled) cancelActivity(context)
     channels(context)
+    if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+      dismissFinished(context)
+    }
   }
 
   @Synchronized
@@ -95,6 +98,12 @@ object AgentNotifications {
       Context.MODE_PRIVATE
     ).edit().putBoolean("dismissed", true).apply()
     cancelActivity(context)
+  }
+
+  @Synchronized
+  fun dismissFinished(context: Context) {
+    val prefs = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+    if (!prefs.getBoolean("lastActive", false)) dismiss(context)
   }
 
   @Synchronized

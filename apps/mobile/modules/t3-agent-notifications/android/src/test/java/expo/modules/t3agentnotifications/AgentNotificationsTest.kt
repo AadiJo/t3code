@@ -471,6 +471,36 @@ class AgentNotificationsTest {
     assertEquals("Project · 2 threads", finished.extras.getString(Notification.EXTRA_SUB_TEXT))
   }
 
+  @Test
+  fun foregroundDismissesFinishedCardAndTerminalReplaysButPreservesNewWork() {
+    val finished = update("done", false) +
+      ("activity_expires_at" to (System.currentTimeMillis() + 900000).toString())
+    AgentNotifications.receive(context, finished)
+    assertEquals(1, manager.activeNotifications.count { it.tag == "t3-agent-activity" })
+
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.dismissFinished(context)
+    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-activity" })
+    AgentNotifications.receive(context, finished)
+    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-activity" })
+
+    AgentNotifications.receive(context, update("next-run", true))
+    AgentNotifications.dismissFinished(context)
+    assertEquals(1, manager.activeNotifications.count { it.tag == "t3-agent-activity" })
+  }
+
+  @Test
+  fun coldStartConfigurationDismissesFinishedCard() {
+    AgentNotifications.receive(
+      context,
+      update("done", false) +
+        ("activity_expires_at" to (System.currentTimeMillis() + 900000).toString())
+    )
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.configure(context, "device", "user", "t3code-dev", true)
+    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-activity" })
+  }
+
   private fun assertTimeout(card: Notification, expected: LongRange) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       assertTrue(card.timeoutAfter in expected)

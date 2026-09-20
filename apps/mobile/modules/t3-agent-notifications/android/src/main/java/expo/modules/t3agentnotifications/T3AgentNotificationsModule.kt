@@ -22,6 +22,10 @@ class T3AgentNotificationsModule : Module() {
       }
     }
 
+    OnActivityEntersForeground {
+      appContext.reactContext?.let { AgentNotifications.dismissFinished(it) }
+    }
+
     Function("clear") {
       appContext.reactContext?.let { AgentNotifications.clear(it) }
     }
