@@ -6,6 +6,7 @@ import {
 } from "../../state/use-composer-drafts";
 import { useWorktreeSetup } from "./use-worktree-setup";
 import { worktreeSetupAgentStarted } from "@t3tools/client-runtime/worktree-setup";
+import { ThreadPageHeader } from "./ThreadPageHeader";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { ScreenHeaderButton } from "../../components/ScreenHeaderButton";
 import type { ScreenHeaderAction } from "../../components/ScreenHeader.types";
@@ -208,8 +209,18 @@ function firstRouteParam(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
+function ThreadPendingHeader() {
+  const { layout } = useAdaptiveWorkspaceLayout();
+  return Platform.OS === "ios" && !layout.usesSplitView ? <ThreadPageHeader title="" /> : null;
+}
+
 function OpeningThreadLoadingScreen() {
-  return <LoadingScreen message="Opening thread…" messagePlacement="above-spinner" />;
+  return (
+    <>
+      <ThreadPendingHeader />
+      <LoadingScreen message="Opening thread…" messagePlacement="above-spinner" />
+    </>
+  );
 }
 
 type ThreadRouteScreenRouteProps = StaticScreenProps<{
@@ -228,23 +239,26 @@ function ThreadUnavailableScreen(props: {
   readonly onAction: () => void;
 }) {
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        flexGrow: 1,
-        justifyContent: "center",
-        paddingHorizontal: 24,
-        paddingVertical: 32,
-      }}
-      className="bg-screen flex-1"
-    >
-      <EmptyState
-        title="Thread unavailable"
-        detail="This thread is not available in the current mobile snapshot."
-        actionLabel={props.actionLabel}
-        onAction={props.onAction}
-      />
-    </ScrollView>
+    <>
+      <ThreadPendingHeader />
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          paddingHorizontal: 24,
+          paddingVertical: 32,
+        }}
+        className="bg-screen flex-1"
+      >
+        <EmptyState
+          title="Thread unavailable"
+          detail="This thread is not available in the current mobile snapshot."
+          actionLabel={props.actionLabel}
+          onAction={props.onAction}
+        />
+      </ScrollView>
+    </>
   );
 }
 
@@ -439,7 +453,7 @@ function ThreadRouteContent(
   );
 
   /* ─── Native header theming ──────────────────────────────────────── */
-  const usesNativeHeaderGlass = NATIVE_LIQUID_GLASS_SUPPORTED;
+  const usesNativeHeaderGlass = NATIVE_LIQUID_GLASS_SUPPORTED && layout.usesSplitView;
   const headerSubtitle = [
     selectedThreadProject?.title ?? null,
     selectedEnvironmentConnection?.environmentLabel ?? null,
@@ -1043,21 +1057,30 @@ function ThreadRouteContent(
   return (
     <>
       {activeInspectorRenderer ? <InspectorPaneRoleActivation /> : null}
-      <ThreadHeader
-        title={selectedThread.title}
-        subtitle={headerSubtitle}
-        headerColor={headerColor}
-        usesNativeHeaderGlass={usesNativeHeaderGlass}
-        gitControls={threadGitControlProps}
-        hasThreadCwd={selectedThreadCwd !== null}
-        hasWorkspaceRoot={Boolean(selectedThreadProject?.workspaceRoot)}
-        fileInspectorSupported={fileInspector.supported}
-        inspectorMode={inspectorMode}
-        onToggleInspector={handleToggleInspector}
-        onOpenGitInspector={handleOpenGitInspector}
-        onOpenFilesInspector={handleOpenFilesInspector}
-        onReturnToThread={props.onReturnToThread}
-      />
+      {Platform.OS === "ios" && !layout.usesSplitView ? (
+        <ThreadPageHeader
+          title={selectedThread.title}
+          subtitle={headerSubtitle}
+          gitControls={threadGitControlProps}
+          onReturnToThread={props.onReturnToThread}
+        />
+      ) : (
+        <ThreadHeader
+          title={selectedThread.title}
+          subtitle={headerSubtitle}
+          headerColor={headerColor}
+          usesNativeHeaderGlass={usesNativeHeaderGlass}
+          gitControls={threadGitControlProps}
+          hasThreadCwd={selectedThreadCwd !== null}
+          hasWorkspaceRoot={Boolean(selectedThreadProject?.workspaceRoot)}
+          fileInspectorSupported={fileInspector.supported}
+          inspectorMode={inspectorMode}
+          onToggleInspector={handleToggleInspector}
+          onOpenGitInspector={handleOpenGitInspector}
+          onOpenFilesInspector={handleOpenFilesInspector}
+          onReturnToThread={props.onReturnToThread}
+        />
+      )}
 
       {renderThreadRouteBody()}
     </>

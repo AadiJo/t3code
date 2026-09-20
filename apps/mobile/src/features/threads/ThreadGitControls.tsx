@@ -68,11 +68,6 @@ function compactMenuStatus(gitStatus: VcsStatusResult | null): string {
 
 type HeaderItem = Record<string, unknown>;
 type HeaderItems = HeaderItem[];
-type ThreadGitHeaderActionItems = {
-  readonly terminal: HeaderItem;
-  readonly files: HeaderItem;
-  readonly git: HeaderItem;
-};
 type QuickActionIcon =
   | "arrow.down.circle"
   | "arrow.up.right.circle"
@@ -248,7 +243,7 @@ function useThreadGitControlModel(props: ThreadGitMenuProps) {
   };
 }
 
-function useThreadGitHeaderActionItems(props: ThreadGitControlsProps): ThreadGitHeaderActionItems {
+export function useThreadGitHeaderActionItems(props: ThreadGitControlsProps) {
   const model = useThreadGitControlModel(props);
 
   return useMemo(
