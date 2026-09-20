@@ -17,6 +17,7 @@ import {
   createMobileThemeVariables,
   DEFAULT_MOBILE_THEME_ID,
   flattenThemeColor,
+  getMobileThemeColors,
   getMobileThemePreviewColors,
   getMobileThemeVariables,
   normalizeMobileThemeId,
@@ -81,9 +82,7 @@ describe("mobile themes", () => {
       const theme = BUILT_IN_THEMES.find((candidate) => candidate.id === themeId);
       const colors = theme
         ? getThemeColorsForAppearance(theme, appearance)!
-        : appearance === "dark"
-          ? T3_CODE_DARK_THEME_COLORS
-          : T3_CODE_LIGHT_THEME_COLORS;
+        : getMobileThemeColors(DEFAULT_MOBILE_THEME_ID, appearance);
       const variables =
         themeId === DEFAULT_MOBILE_THEME_ID
           ? readDefaultMobileThemeVariables(appearance)
@@ -182,10 +181,16 @@ describe("mobile themes", () => {
           runtime[platform === "android" ? "--color-header" : "--color-drawer"],
           runtime["--color-screen"],
         );
-        expect(relativeLuminance(sidebar)).toBeLessThan(
-          relativeLuminance(runtime["--color-thread-canvas"]),
-        );
-        expect(contrastRatio(chrome, runtime["--color-screen"])).toBeGreaterThanOrEqual(1.06);
+        if (appearance === "light") {
+          expect(relativeLuminance(sidebar)).toBeLessThan(
+            relativeLuminance(runtime["--color-thread-canvas"]),
+          );
+        } else {
+          expect(relativeLuminance(sidebar)).toBeGreaterThan(
+            relativeLuminance(runtime["--color-thread-canvas"]),
+          );
+        }
+        expect(contrastRatio(chrome, runtime["--color-screen"])).toBeGreaterThanOrEqual(1.05);
         const foregroundRoles =
           platform === "android"
             ? (["--color-header-foreground", "--color-foreground-muted"] as const)

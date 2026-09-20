@@ -382,7 +382,7 @@ const config: ExpoConfig = {
         imageWidth: 220,
         dark: {
           image: variant.assets.splashIcon,
-          backgroundColor: "#0a0a0a",
+          backgroundColor: "#141414",
         },
         android: {
           // Android 12+ masks the splash icon to a circle over the central two thirds of

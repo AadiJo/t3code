@@ -52,8 +52,8 @@ describe("generate mobile Uniwind themes", () => {
     expect(variables.dark).toEqual(readDefaultMobileThemeVariables("dark"));
     expect(variables.light["--color-screen"]).toBe("#fcfcfc");
     expect(variables.light["--color-drawer"]).toBe("#fafafa");
-    expect(variables.dark["--color-screen"]).toBe("#0a0a0a");
-    expect(variables.dark["--color-drawer"]).toBe("#000000");
+    expect(variables.dark["--color-screen"]).toBe("#141414");
+    expect(variables.dark["--color-drawer"]).toBe("#1a1a1a");
     expect(Object.keys(variables.light)).toEqual(Object.keys(variables.dark));
   });
 
@@ -81,10 +81,10 @@ describe("generate mobile Uniwind themes", () => {
         ),
         name,
       ).toEqual({
-        "--color-clerk-page": isDark ? "#0a0a0a" : "#fcfcfc",
-        "--color-clerk-foreground": isDark ? "#f5f5f5" : "#27272a",
-        "--color-clerk-foreground-muted": isDark ? "#818181" : "#71717b",
-        "--color-clerk-border": isDark ? "#191919" : "#e4e4e7",
+        "--color-clerk-page": isDark ? "#141414" : "#fcfcfc",
+        "--color-clerk-foreground": isDark ? "#d4d4d4" : "#27272a",
+        "--color-clerk-foreground-muted": isDark ? "#a8a8a8" : "#71717b",
+        "--color-clerk-border": isDark ? "#2f2f2f" : "#e4e4e7",
         "--color-clerk-danger": isDark ? "#ff6467" : "#c10007",
       });
     }

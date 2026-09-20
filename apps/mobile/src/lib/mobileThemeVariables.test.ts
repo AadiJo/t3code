@@ -5,6 +5,14 @@ import { getMobileThemeVariables, MOBILE_THEME_IDS, themeColorWithAlpha } from "
 import { getMobileThemeRuntimeVariables } from "./mobileThemeVariables";
 
 describe("mobile theme runtime variables", () => {
+  it.each(["ios", "android", "web"])(
+    "uses the default dark canvas and bubble colors on %s",
+    (platform) => {
+      const variables = getMobileThemeRuntimeVariables("t3-code", "dark", platform);
+      expect(variables["--color-screen"]).toBe("#141414");
+      expect(variables["--color-user-bubble"]).toBe("#242424");
+    },
+  );
   it("matches the standard base palette to the generated stylesheet", () => {
     expect(getMobileThemeRuntimeVariables("t3-code", "light", "web")).toEqual(
       readDefaultMobileThemeVariables("light"),
@@ -55,7 +63,7 @@ describe("mobile theme runtime variables", () => {
       for (const appearance of ["light", "dark"] as const) {
         const variables = getMobileThemeRuntimeVariables(themeId, appearance, "android");
         expect(variables["--color-header"]).toBe(
-          appearance === "light" ? "rgba(244, 244, 245, 1)" : "rgba(20, 20, 20, 1)",
+          appearance === "light" ? "rgba(244, 244, 245, 1)" : "rgba(48, 48, 48, 1)",
         );
         for (const pane of ["--color-screen", "--color-sheet-solid", "--color-drawer"] as const) {
           expect(variables["--color-header"]).not.toBe(themeColorWithAlpha(variables[pane], 1));
@@ -65,7 +73,7 @@ describe("mobile theme runtime variables", () => {
   );
 
   it.each(["t3-code", "material-you"] as const)(
-    "adapts %s iPad chrome without reversing the dark desktop hierarchy",
+    "adapts %s iPad chrome while preserving the selected palette",
     (themeId) => {
       for (const appearance of ["light", "dark"] as const) {
         const ios = getMobileThemeRuntimeVariables(themeId, appearance, "ios");
@@ -77,8 +85,8 @@ describe("mobile theme runtime variables", () => {
         } else {
           expect(ios).toEqual(getMobileThemeVariables("t3-code", appearance));
           expect(ios["--color-drawer"]).toBe(android["--color-drawer"]);
-          expect(ios["--color-drawer"]).toBe("#000000");
-          expect(ios["--color-thread-canvas"]).toBe("#0a0a0a");
+          expect(ios["--color-drawer"]).toBe("#1a1a1a");
+          expect(ios["--color-thread-canvas"]).toBe("#141414");
         }
         expect(themeColorWithAlpha(ios["--color-thread-hover"], 1)).not.toBe(
           themeColorWithAlpha(ios["--color-drawer"], 1),
