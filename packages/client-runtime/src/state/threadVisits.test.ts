@@ -22,7 +22,11 @@ function at(seconds: number) {
 }
 
 // claimThreadOpen dedupes per thread in module state, so each test opens its own thread.
-function setup(threadName: string, initial: Omit<Shell, "environmentId" | "id"> | null) {
+function setup(
+  threadName: string,
+  initial: Omit<Shell, "environmentId" | "id"> | null,
+  viewingAtom?: Atom.Atom<boolean>,
+) {
   vi.useFakeTimers({ now: Date.UTC(2026, 0, 1) });
   const threadId = ThreadId.make(threadName);
   const ref = { environmentId, threadId };
@@ -41,10 +45,12 @@ function setup(threadName: string, initial: Omit<Shell, "environmentId" | "id"> 
       },
     },
     markLocalVisit: (_ref, visitedAt) => localVisits.push(visitedAt),
+    ...(viewingAtom === undefined ? {} : { viewingAtom }),
   });
   const registry = AtomRegistry.make();
   return {
     ref,
+    registry,
     visits,
     localVisits,
     mount: () => registry.mount(tracker(ref)),
@@ -190,4 +196,34 @@ it("advances the watermark to a wake without waiting for the throttle", () => {
   vi.advanceTimersByTime(1_000);
   t.update({ updatedAt: at(16) });
   expect(t.visits).toHaveLength(2);
+});
+
+it("keeps a mark-unread when the thread was already read before this open", () => {
+  using t = setup("thread-read-before", {
+    updatedAt: at(10),
+    lastVisitedAt: at(10),
+    latestRun: null,
+  });
+  claimThreadOpen(environmentId, t.ref.threadId, Date.UTC(2026, 0, 1));
+  t.mount();
+  t.update({ lastVisitedAt: at(5) });
+  vi.advanceTimersByTime(VISIT_DISPATCH_THROTTLE_MS);
+  expect(t.visits).toEqual([]);
+});
+
+it("holds the watermark while the thread is not in view", () => {
+  const viewing = Atom.make(true);
+  using t = setup(
+    "thread-background",
+    { updatedAt: at(10), lastVisitedAt: at(0), latestRun: null },
+    viewing,
+  );
+  t.mount();
+  t.registry.set(viewing, false);
+  t.update({ updatedAt: at(20), latestRun: { completedAt: at(20) } });
+  vi.advanceTimersByTime(VISIT_DISPATCH_THROTTLE_MS);
+  expect(t.visits).toHaveLength(1);
+
+  t.registry.set(viewing, true);
+  expect(t.visits.slice(1)).toEqual([{ threadId: t.ref.threadId, visitedAt: at(20) }]);
 });

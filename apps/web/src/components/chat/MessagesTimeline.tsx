@@ -892,6 +892,19 @@ const ConversationTimeline = memo(function ConversationTimeline({
     if (!restoringThreadPosition) scheduleMinimapRefresh();
   }, [restoringThreadPosition, scheduleMinimapRefresh]);
 
+  // The last reply ends in its copy, fork and time row. While the composer covers only that
+  // row, the space below it, and a sliver of the reply above it, the timeline still reads as
+  // at its end, so Scroll to end appears once the reply itself (its text, or an HTML page that
+  // ends it) goes under the composer.
+  const lastReplyContentUncovered = (lastRow: unknown, previousRow: unknown) => {
+    if (footer !== null || anchoredEndSpace || !(lastRow instanceof HTMLElement)) return false;
+    const actions = lastRow.querySelector("[data-assistant-message-meta]");
+    const scroller = listRef.current?.getScrollableNode();
+    if (!actions || !(scroller instanceof HTMLElement)) return false;
+    const composerTop = scroller.getBoundingClientRect().bottom - contentInsetEndAdjustment;
+    return replyContentBottom(actions, previousRow) - END_REPLY_OVERLAP_PX <= composerTop;
+  };
+
   // The measurement the last remember wrote, so a follow release can rewrite
   // it without reading render state from a listener.
   const lastRememberedRef = useRef<{
@@ -902,7 +915,15 @@ const ConversationTimeline = memo(function ConversationTimeline({
   const rememberPosition = (followingEnd: boolean) => {
     const state = listRef.current?.getState?.();
     if (restoringThreadPosition || state?.data !== rows) return;
-    const isAtEnd = resolveTimelineIsAtEnd(state);
+    const reachedEnd = resolveTimelineIsAtEnd(state);
+    const isAtEnd =
+      reachedEnd === false &&
+      lastReplyContentUncovered(
+        state.elementAtIndex(rows.length - 1),
+        state.elementAtIndex(rows.length - 2),
+      )
+        ? true
+        : reachedEnd;
     const position = state.data.length ? resolveWorkGroupScrollAnchor(state) : undefined;
     if (position && isAtEnd !== undefined) {
       const index = state.indexByKey(position.rowId);
@@ -1717,5 +1738,21 @@ function AttemptFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "at
       </button>
       {loading ? <WorkHistorySkeleton /> : null}
     </div>
+  );
+}
+
+// How far the composer may cover the end of the last reply before the timeline leaves its end.
+const END_REPLY_OVERLAP_PX = 8;
+
+/** Where the reply above an action row ends: its text, changed files card, or HTML page. */
+function replyContentBottom(actions: Element, previousRow: unknown): number {
+  const above = actions.previousElementSibling;
+  if (above) return above.getBoundingClientRect().bottom;
+  // An action row of its own follows the reply's last row, below that row's padding.
+  const row =
+    previousRow instanceof HTMLElement ? previousRow.querySelector("[data-timeline-row-id]") : null;
+  if (!row) return actions.getBoundingClientRect().top;
+  return (
+    row.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(row).paddingBottom)
   );
 }

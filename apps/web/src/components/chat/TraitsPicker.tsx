@@ -521,6 +521,12 @@ export const TraitsPicker = memo(function TraitsPicker({
         <TooltipTrigger
           render={
             <MenuTrigger
+              // Open on release so menu focus does not cancel the trigger's press effect.
+              onMouseDown={(event) => event.preventBaseUIHandler()}
+              onClick={(event) => {
+                event.preventBaseUIHandler();
+                setIsMenuOpen((open) => !open);
+              }}
               render={
                 <ComposerControl
                   disabled={disabled}
@@ -544,14 +550,26 @@ export const TraitsPicker = memo(function TraitsPicker({
                 size === "xs" ? "gap-1" : "gap-1.5",
               )}
             >
-              <ComposerControlIcon icon={GaugeIcon} size={size} />
+              {/* No icon beside the effort; icon-only footers reveal it instead. */}
+              <span
+                data-composer-control-compact-icon
+                className="pointer-events-none invisible absolute"
+              >
+                <ComposerControlIcon icon={GaugeIcon} size={size} />
+              </span>
               <span data-composer-control-label className="min-w-0 truncate">
                 {triggerLabel}
               </span>
             </span>
           ) : (
             <>
-              <ComposerControlIcon icon={GaugeIcon} size={size} />
+              {/* No icon beside the effort; icon-only footers reveal it instead. */}
+              <span
+                data-composer-control-compact-icon
+                className="pointer-events-none invisible absolute"
+              >
+                <ComposerControlIcon icon={GaugeIcon} size={size} />
+              </span>
               <span data-composer-control-label>{triggerLabel}</span>
             </>
           )}

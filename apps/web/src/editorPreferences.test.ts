@@ -1,5 +1,6 @@
 import {
   AuthOrchestrationOperateScope,
+  EditorId,
   EnvironmentAuthorizationError,
   EnvironmentId,
 } from "@t3tools/contracts";
@@ -66,4 +67,11 @@ it("checks revocation and regrant when a retained editor callback is invoked", a
     input: { cwd: "/work/readme.md:5", editor: "vscode" },
   });
   expect(state.setPreference).toHaveBeenCalledTimes(1);
+});
+
+it("opens VS Code ahead of Cursor when no editor was picked", async () => {
+  state.allowed.add(primary);
+  const open = useOpenInPreferredEditor(primary, ["cursor", "vscode"]);
+  expect(await open("/work")).toMatchObject({ _tag: "Success", value: "vscode" });
+  expect(state.setPreference).toHaveBeenCalledWith("t3code:last-editor", "vscode", EditorId);
 });

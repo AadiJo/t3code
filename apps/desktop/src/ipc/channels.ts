@@ -130,5 +130,10 @@ export const PREVIEW_ANNOTATION_VOICE_STATE_CHANNEL = "desktop:preview-annotatio
 
 export const RECEIVE_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:receive-provider-auth-callback";
 export const CANCEL_PROVIDER_AUTH_CALLBACK_CHANNEL = "desktop:cancel-provider-auth-callback";
+export const GET_NOTIFICATIONS_CHANNEL = "desktop:notifications:get";
+export const SYNC_NOTIFICATIONS_CHANNEL = "desktop:notifications:sync";
+export const UPDATE_NOTIFICATIONS_CHANNEL = "desktop:notifications:update";
+export const NOTIFICATIONS_CHANGED_CHANNEL = "desktop:notifications:changed";
+export const NOTIFICATION_OPEN_CHANNEL = "desktop:notifications:open";
 export const TAKE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:take-legacy-local-storage";
 export const COMPLETE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:complete-legacy-local-storage";

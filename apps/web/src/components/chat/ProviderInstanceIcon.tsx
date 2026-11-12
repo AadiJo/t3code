@@ -11,12 +11,16 @@ import {
   AnthropicIcon,
   AntigravityIcon,
   ClaudeAI,
+  Gemini,
+  GrokIcon,
   Icon,
+  MetaIcon,
   OllamaIcon,
   OpenAI,
   OpenRouterIcon,
 } from "../Icons";
 
+import { usesGeminiModelIcon, usesGrokModelIcon, usesMetaModelIcon } from "./providerIconUtils";
 import { cn } from "~/lib/utils";
 import { providerClients } from "../settings/providerDriverMeta";
 import { ProviderPackageIcon } from "./ProviderPackageIcon";
@@ -88,6 +92,7 @@ export function resolveProviderInstanceAcpRegistryIconUrl(input: {
 
 export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   driverKind: ProviderDriverKind;
+  model?: string;
   displayName: string;
   accentColor?: string | undefined;
   acpRegistryAgentId?: string | undefined;
@@ -100,8 +105,16 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   badgeClassName?: string;
   indicatorBackground?: string;
 }) {
-  const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
-  const packageIcon = providerClients.get(props.driverKind)?.icon;
+  // Some models get their brand mark instead of the provider's, including over a package icon.
+  const modelIcon = usesMetaModelIcon(props.driverKind, props.model)
+    ? MetaIcon
+    : usesGrokModelIcon(props.driverKind, props.model)
+      ? GrokIcon
+      : usesGeminiModelIcon(props.driverKind, props.model)
+        ? Gemini
+        : null;
+  const Icon = modelIcon ?? PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
+  const packageIcon = modelIcon ? undefined : providerClients.get(props.driverKind)?.icon;
   const indicatorBackground = props.indicatorBackground ?? "var(--card)";
   const accentColor = normalizeProviderAccentColor(props.accentColor);
   const accentStyle = accentColor

@@ -679,6 +679,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["notification toast popup completion input approval failure"],
   },
   {
+    id: "notification-inbox",
+    title: "Notification inbox",
+    to: "/settings/general",
+    searchTerms: ["bell sidebar notifications unread mark read macos"],
+    desktopOnly: true,
+  },
+  {
     id: "time-format",
     title: "Time format",
     to: "/settings/general",

@@ -28,7 +28,6 @@ export const ModelListRow = memo(function ModelListRow(props: {
   isSelected: boolean;
   /** Marks this instance apart from another of the same provider. */
   showInstanceBadge: boolean;
-  showNewBadge?: boolean;
   unavailable?: boolean;
   jumpLabel?: string | null;
   disabledReason?: string | null;
@@ -56,6 +55,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
       {/* One row shape in every tab: the logo names the provider, so Favorites needs no second line. */}
       <ProviderInstanceIcon
         driverKind={props.driverKind}
+        model={props.slug}
         displayName={props.providerDisplayName}
         accentColor={props.providerAccentColor}
         acpRegistryAgentId={props.acpRegistryAgentId}
@@ -83,14 +83,6 @@ export const ModelListRow = memo(function ModelListRow(props: {
         {props.subProvider ? (
           <span className="min-w-0 shrink truncate text-xs text-muted-foreground/70">
             {props.subProvider}
-          </span>
-        ) : null}
-        {props.showNewBadge ? (
-          <span
-            className="shrink-0 rounded border border-update/35 bg-update/15 px-0.5 py-px text-3xs font-bold uppercase leading-none tracking-wide text-update-foreground"
-            aria-label="New model"
-          >
-            New
           </span>
         ) : null}
         {props.unavailable ? (

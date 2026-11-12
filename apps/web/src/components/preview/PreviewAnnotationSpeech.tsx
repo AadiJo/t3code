@@ -61,7 +61,6 @@ export function PreviewAnnotationSpeech({
     projectName: project?.title,
     ownerKey: JSON.stringify(["preview-annotation", threadRef, tabId, config.sessionId]),
     draftText: text,
-    offerSetup: false,
     readDraft: () => ({
       text: draft.current.text,
       selection: { start: draft.current.cursor, end: draft.current.selectionEnd },

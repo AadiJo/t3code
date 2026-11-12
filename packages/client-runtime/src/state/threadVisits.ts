@@ -43,6 +43,11 @@ export interface ThreadVisitTrackerOptions {
    * that keeps its own watermark for them records the visit here instead.
    */
   readonly markLocalVisit?: (ref: ScopedThreadRef, visitedAt: string) => void;
+  /**
+   * False while the user cannot see the thread, such as in a background window. The
+   * watermark holds until it is true again, so a turn that finishes meanwhile stays unread.
+   */
+  readonly viewingAtom?: Atom.Atom<boolean>;
 }
 
 /**
@@ -65,6 +70,8 @@ export function createThreadVisitTracker(options: ThreadVisitTrackerOptions) {
       // rewind leaves updatedAt untouched.
       let lastDispatchedUpdatedAt: string | null = null;
       let lastDispatchAt = 0;
+      let latestShell: VisitedShell | null = null;
+      let viewing = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const clearTimer = () => {
         if (timer === undefined) return;
@@ -93,8 +100,9 @@ export function createThreadVisitTracker(options: ThreadVisitTrackerOptions) {
       };
 
       const onShell = (shell: VisitedShell | null) => {
+        latestShell = shell;
         clearTimer();
-        if (shell === null) return;
+        if (shell === null || !viewing) return;
 
         const shellUpdatedAtMs = Date.parse(shell.updatedAt);
         if (Number.isNaN(shellUpdatedAtMs)) return;
@@ -142,6 +150,16 @@ export function createThreadVisitTracker(options: ThreadVisitTrackerOptions) {
 
       // `subscribe`, not `get`: a rebuild would reset the open and throttle
       // state on every streaming tick.
+      if (options.viewingAtom !== undefined) {
+        get.subscribe(
+          options.viewingAtom,
+          (next) => {
+            viewing = next;
+            onShell(latestShell);
+          },
+          { immediate: true },
+        );
+      }
       get.subscribe(options.threadShellAtom(ref), onShell, { immediate: true });
     }).pipe(Atom.withLabel(`thread-visit-tracker:${key}`));
   });

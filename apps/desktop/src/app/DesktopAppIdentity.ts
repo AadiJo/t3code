@@ -92,9 +92,9 @@ export const make = Effect.gen(function* () {
   const configure = Effect.gen(function* () {
     const commitHash = yield* resolveAboutCommitHash;
     // Electron strips spaces but keeps parentheses in its User-Agent token, breaking Turnstile in preview sessions.
-    yield* electronApp.setName(
-      `${environment.branding.baseName} ${environment.branding.stageLabel}`,
-    );
+    // Beta drops its stage, as the display name does.
+    const { baseName, stageLabel } = environment.branding;
+    yield* electronApp.setName(stageLabel === "Beta" ? baseName : `${baseName} ${stageLabel}`);
     yield* electronApp.setAboutPanelOptions({
       applicationName: environment.displayName,
       applicationVersion: environment.appVersion,
@@ -105,13 +105,16 @@ export const make = Effect.gen(function* () {
       yield* electronApp.setAppUserModelId(environment.appUserModelId);
     }
 
-    // Packaged bundles carry their icon in Info.plist; setting it again overwrites the user's custom icon.
+    // Loose Electron runs need a Dock icon. Packaged apps and the local macOS
+    // launcher carry their own icon resources, including the native icon stack.
     if (environment.platform === "darwin" && !environment.isPackaged) {
       const iconPaths = yield* assets.iconPaths;
-      yield* Option.match(iconPaths.png, {
-        onNone: () => Effect.void,
-        onSome: electronApp.setDockIcon,
-      });
+      if (Option.isNone(iconPaths.icns)) {
+        yield* Option.match(iconPaths.png, {
+          onNone: () => Effect.void,
+          onSome: electronApp.setDockIcon,
+        });
+      }
     }
   }).pipe(Effect.withSpan("desktop.appIdentity.configure"));
 

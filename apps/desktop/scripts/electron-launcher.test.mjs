@@ -11,11 +11,36 @@ import {
   makeDevelopmentEnvironmentScript,
   makeDevelopmentLauncherScript,
   resolveElectronBinaryPath,
+  APP_BUNDLE_ID,
+  resolveMacLauncherIconComposerPath,
+  resolveLocalAppBundleId,
+  resolveMacLauncherSigningArgs,
   resolveMacLauncherPaths,
   writeDevelopmentLauncherScript,
 } from "./electron-launcher.mjs";
 
 describe("electron development launcher", () => {
+  it("gives local builds an identity that cannot collide with an installed release", () => {
+    assert.equal(
+      resolveLocalAppBundleId({ development: false, repoName: "t3code-official" }),
+      "com.t3tools.t3code.local.t3codeofficial",
+    );
+    assert.equal(
+      resolveLocalAppBundleId({ development: true, repoName: "t3code-official" }),
+      "com.t3tools.t3code.dev.t3codeofficial",
+    );
+    assert.notEqual(APP_BUNDLE_ID, "com.t3tools.t3code");
+  });
+
+  it("signs only the patched app bundle", () => {
+    assert.deepEqual(resolveMacLauncherSigningArgs("/tmp/T3 Code.app"), [
+      "--force",
+      "--sign",
+      "-",
+      "/tmp/T3 Code.app",
+    ]);
+  });
+
   it("uses captured values only as fallbacks for a live runner environment", () => {
     const environmentScript = makeDevelopmentEnvironmentScript({
       VITE_DEV_SERVER_URL: "http://127.0.0.1:8526",
@@ -115,6 +140,11 @@ describe("electron development launcher", () => {
     } finally {
       NodeFS.rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("derives launcher icon composer files from development and production assets", () => {
+    assert.match(resolveMacLauncherIconComposerPath(true), /assets\/dev\/app-icon\.icon$/);
+    assert.match(resolveMacLauncherIconComposerPath(false), /assets\/prod\/app-icon\.icon$/);
   });
 });
 

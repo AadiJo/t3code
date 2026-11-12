@@ -10,13 +10,17 @@ const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 export const desktopDir = NodePath.resolve(__dirname, "..");
 const repoRoot = NodePath.resolve(desktopDir, "..", "..");
-const devBundleIdSuffix = NodePath.basename(repoRoot)
-  .toLowerCase()
-  .replaceAll(/[^a-z0-9]+/g, "");
-const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Beta)";
-const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
+
+export function resolveLocalAppBundleId({ development, repoName }) {
+  const suffix = repoName.toLowerCase().replaceAll(/[^a-z0-9]+/g, "") || "local";
+  return `com.t3tools.t3code.${development ? "dev" : "local"}.${suffix}`;
+}
+
+const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code";
+export const APP_BUNDLE_ID = resolveLocalAppBundleId({
+  development: isDevelopment,
+  repoName: NodePath.basename(repoRoot),
+});
 const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
 const LAUNCHER_VERSION = 20;
 const developmentMacIconPngPath = NodePath.join(
@@ -26,6 +30,8 @@ const developmentMacIconPngPath = NodePath.join(
   "blueprint-macos-1024.png",
 );
 const productionMacIconPngPath = NodePath.join(repoRoot, "assets", "prod", "black-macos-1024.png");
+const developmentMacIconComposerPath = NodePath.join(repoRoot, "assets", "dev", "app-icon.icon");
+const productionMacIconComposerPath = NodePath.join(repoRoot, "assets", "prod", "app-icon.icon");
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher script has no Effect runtime.
 const hostPlatform = NodeOS.platform();
 
@@ -94,12 +100,10 @@ function runChecked(command, args) {
   throw new Error(`Failed to run ${command} ${args.join(" ")}: ${details}`.trim());
 }
 
-function resolveMacCodeSignArguments(appBundlePath) {
-  return ["--force", "--deep", "--sign", "-", "--timestamp=none", appBundlePath];
-}
-
-function signMacLauncherBundle(appBundlePath) {
-  runChecked("codesign", resolveMacCodeSignArguments(appBundlePath));
+function removePlistKey(plistPath, key) {
+  NodeChildProcess.spawnSync("plutil", ["-remove", key, plistPath], {
+    encoding: "utf8",
+  });
 }
 
 function shellSingleQuote(value) {
@@ -211,8 +215,15 @@ function resolveMacLauncherIconPaths(runtimeDir, development = isDevelopment) {
   };
 }
 
-function ensureMacIconIcns(runtimeDir) {
-  const { sourceIconPath, generatedIconPath } = resolveMacLauncherIconPaths(runtimeDir);
+export function resolveMacLauncherIconComposerPath(development = isDevelopment) {
+  return development ? developmentMacIconComposerPath : productionMacIconComposerPath;
+}
+
+function ensureMacIconIcns(runtimeDir, development = isDevelopment) {
+  const { sourceIconPath, generatedIconPath } = resolveMacLauncherIconPaths(
+    runtimeDir,
+    development,
+  );
   NodeFS.mkdirSync(runtimeDir, { recursive: true });
 
   if (!NodeFS.existsSync(sourceIconPath)) {
@@ -273,10 +284,101 @@ function resolveMacBundleInfoPlistStrings(executableName) {
   };
 }
 
-function patchMainBundleInfoPlist(appBundlePath, iconPath, executableName) {
+function findLatestMtimeMs(path) {
+  const stat = NodeFS.statSync(path);
+  if (!stat.isDirectory()) {
+    return stat.mtimeMs;
+  }
+
+  return Math.max(
+    stat.mtimeMs,
+    ...NodeFS.readdirSync(path, { withFileTypes: true }).map((entry) =>
+      findLatestMtimeMs(NodePath.join(path, entry.name)),
+    ),
+  );
+}
+
+function ensureMacIconAssets(runtimeDir, development = isDevelopment) {
+  const mode = development ? "dev" : "prod";
+  const iconComposerPath = resolveMacLauncherIconComposerPath(development);
+  const fallback = () => ({
+    assetCatalogPath: null,
+    iconPath: ensureMacIconIcns(runtimeDir, development),
+  });
+
+  if (!NodeFS.existsSync(iconComposerPath)) {
+    return fallback();
+  }
+
+  const assetCatalogPath = NodePath.join(runtimeDir, `Assets-${mode}.car`);
+  const iconPath = NodePath.join(runtimeDir, `icon-${mode}-composer.icns`);
+  const sourceMtimeMs = findLatestMtimeMs(iconComposerPath);
+  if (
+    NodeFS.existsSync(assetCatalogPath) &&
+    NodeFS.existsSync(iconPath) &&
+    NodeFS.statSync(assetCatalogPath).mtimeMs >= sourceMtimeMs &&
+    NodeFS.statSync(iconPath).mtimeMs >= sourceMtimeMs
+  ) {
+    return { assetCatalogPath, iconPath };
+  }
+
+  const compileRoot = NodeFS.mkdtempSync(NodePath.join(runtimeDir, "icon-composer-"));
+  const inputPath = NodePath.join(compileRoot, "Icon.icon");
+  const outputPath = NodePath.join(compileRoot, "out");
+  NodeFS.cpSync(iconComposerPath, inputPath, { recursive: true });
+  NodeFS.mkdirSync(outputPath, { recursive: true });
+
+  try {
+    runChecked("xcrun", [
+      "actool",
+      inputPath,
+      "--compile",
+      outputPath,
+      "--output-format",
+      "human-readable-text",
+      "--notices",
+      "--warnings",
+      "--output-partial-info-plist",
+      NodePath.join(outputPath, "assetcatalog_generated_info.plist"),
+      "--app-icon",
+      "Icon",
+      "--include-all-app-icons",
+      "--accent-color",
+      "AccentColor",
+      "--enable-on-demand-resources",
+      "NO",
+      "--development-region",
+      "en",
+      "--target-device",
+      "mac",
+      "--minimum-deployment-target",
+      "26.0",
+      "--platform",
+      "macosx",
+    ]);
+    NodeFS.copyFileSync(NodePath.join(outputPath, "Assets.car"), assetCatalogPath);
+    NodeFS.copyFileSync(NodePath.join(outputPath, "Icon.icns"), iconPath);
+    return { assetCatalogPath, iconPath };
+  } catch (error) {
+    console.warn(
+      "[desktop-launcher] Failed to compile the local Icon Composer project, falling back to ICNS.",
+      error,
+    );
+    return fallback();
+  } finally {
+    NodeFS.rmSync(compileRoot, { recursive: true, force: true });
+  }
+}
+
+function patchMainBundleInfoPlist(appBundlePath, iconAssets, executableName) {
   const infoPlistPath = NodePath.join(appBundlePath, "Contents", "Info.plist");
   for (const [key, value] of Object.entries(resolveMacBundleInfoPlistStrings(executableName))) {
     setPlistString(infoPlistPath, key, value);
+  }
+  if (iconAssets.assetCatalogPath) {
+    setPlistString(infoPlistPath, "CFBundleIconName", "Icon");
+  } else {
+    removePlistKey(infoPlistPath, "CFBundleIconName");
   }
   // macOS 26 offers Messages/Mail codes in every text field unless opted out.
   setPlistJson(infoPlistPath, "NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac", true);
@@ -288,8 +390,14 @@ function patchMainBundleInfoPlist(appBundlePath, iconPath, executableName) {
   ]);
 
   const resourcesDir = NodePath.join(appBundlePath, "Contents", "Resources");
-  NodeFS.copyFileSync(iconPath, NodePath.join(resourcesDir, "icon.icns"));
-  NodeFS.copyFileSync(iconPath, NodePath.join(resourcesDir, "electron.icns"));
+  const bundledAssetCatalogPath = NodePath.join(resourcesDir, "Assets.car");
+  NodeFS.copyFileSync(iconAssets.iconPath, NodePath.join(resourcesDir, "icon.icns"));
+  NodeFS.copyFileSync(iconAssets.iconPath, NodePath.join(resourcesDir, "electron.icns"));
+  if (iconAssets.assetCatalogPath) {
+    NodeFS.copyFileSync(iconAssets.assetCatalogPath, bundledAssetCatalogPath);
+  } else {
+    NodeFS.rmSync(bundledAssetCatalogPath, { force: true });
+  }
 }
 
 function patchHelperBundleInfoPlists(appBundlePath) {
@@ -323,6 +431,17 @@ function patchHelperBundleInfoPlists(appBundlePath) {
   }
 }
 
+export function resolveMacLauncherSigningArgs(appBundlePath) {
+  return ["--force", "--sign", "-", appBundlePath];
+}
+
+function signMacLauncherBundle(appBundlePath) {
+  // Bundle metadata and icons are part of the signature, so re-sign the patched bundle and macOS
+  // ties notifications to it, not to Electron or another T3 Code build. No --deep: Electron's
+  // versioned frameworks are both framework roots and app bundles, so recursion is ambiguous.
+  runChecked("codesign", resolveMacLauncherSigningArgs(appBundlePath));
+}
+
 function readJson(path) {
   try {
     return JSON.parse(NodeFS.readFileSync(path, "utf8"));
@@ -350,16 +469,18 @@ function buildMacLauncher(electronBinaryPath) {
   const launcherBinaryPath = isDevelopment
     ? developmentPaths.launcherBinaryPath
     : runtimeElectronBinaryPath;
-  const iconPath = ensureMacIconIcns(runtimeDir);
-  const metadataPath = NodePath.join(runtimeDir, "metadata.json");
-
   NodeFS.mkdirSync(runtimeDir, { recursive: true });
+  const iconAssets = ensureMacIconAssets(runtimeDir);
+  const metadataPath = NodePath.join(runtimeDir, "metadata.json");
 
   const expectedMetadata = {
     launcherVersion: LAUNCHER_VERSION,
     sourceAppBundlePath,
     sourceAppMtimeMs: NodeFS.statSync(sourceAppBundlePath).mtimeMs,
-    iconMtimeMs: NodeFS.statSync(iconPath).mtimeMs,
+    iconMtimeMs: NodeFS.statSync(iconAssets.iconPath).mtimeMs,
+    assetCatalogMtimeMs: iconAssets.assetCatalogPath
+      ? NodeFS.statSync(iconAssets.assetCatalogPath).mtimeMs
+      : null,
     appBundleId: APP_BUNDLE_ID,
     appProtocolSchemes: APP_PROTOCOL_SCHEMES,
   };
@@ -390,7 +511,7 @@ function buildMacLauncher(electronBinaryPath) {
   });
   patchMainBundleInfoPlist(
     targetAppBundlePath,
-    iconPath,
+    iconAssets,
     isDevelopment ? developmentPaths.launcherExecutableName : "Electron",
   );
   patchHelperBundleInfoPlists(targetAppBundlePath);

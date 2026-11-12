@@ -483,6 +483,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.inAppNotificationsEnabled !== DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled
       ? ["In-app notifications"]
       : []),
+    ...(settings.notificationInboxEnabled !== DEFAULT_UNIFIED_SETTINGS.notificationInboxEnabled
+      ? ["Notification inbox"]
+      : []),
     ...(settings.sidebarProjectGroupingMode !== DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode
       ? ["Project Grouping"]
       : []),
@@ -647,6 +650,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
+      notificationInboxEnabled: DEFAULT_UNIFIED_SETTINGS.notificationInboxEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       persistComposerContextStrip: DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip,
       diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
@@ -781,6 +785,21 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+        {isElectron ? (
+          <SettingsRow
+            {...searchableSetting("notification-inbox")}
+            description="Show the notification bell in the sidebar footer on macOS. Notifications are still recorded and dismissed without it."
+            control={
+              <Switch
+                checked={settings.notificationInboxEnabled}
+                onCheckedChange={(checked) =>
+                  updateSettings({ notificationInboxEnabled: Boolean(checked) })
+                }
+                aria-label="Notification inbox"
+              />
+            }
+          />
+        ) : null}
       </SettingsSection>
 
       <SettingsSection id="sidebar" title="Sidebar">

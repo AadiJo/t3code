@@ -312,6 +312,15 @@ describe("ClientSettings notifications", () => {
   });
 });
 
+describe("ClientSettings notification inbox", () => {
+  it("keeps the notification inbox opt-in and patchable", () => {
+    expect(decodeClientSettings({}).notificationInboxEnabled).toBe(false);
+    expect(
+      decodeClientSettingsPatch({ notificationInboxEnabled: true }).notificationInboxEnabled,
+    ).toBe(true);
+  });
+});
+
 describe("ClientSettings quit confirmation", () => {
   it.each([
     [true, "hold"],

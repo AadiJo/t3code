@@ -3,6 +3,25 @@
 Use a new thread for a separate task. Choose **New worktree** when its code changes
 need a separate branch and working directory.
 
+## Review desktop notifications
+
+On macOS, turn on **Notification inbox** in **Settings → General → Notifications** to
+show **Notifications** in the sidebar footer. Open it to review approvals, questions,
+failed turns, and completed turns across connected environments. T3 Code shows alerts
+in the app while it has focus, and in Notification Center while it does not.
+Completed turns do not show popups while T3 Code has focus. They still appear in
+the notification menu and contribute to the thread's Done indicator while unread.
+
+Open the related thread or mark a notification as read to clear its unread state,
+remove its Notification Center entry, and reduce the Dock count. Marking a completed
+turn as read also clears the thread's Done indicator. Settling or snoozing a thread
+marks its notifications as read. This does not approve a request or answer a question.
+Resolved requests clear automatically. Dismissing a macOS alert does not mark it as read.
+
+Notifications and read state are saved on this Mac. T3 Code must be running and connected
+to receive new alerts. Choose the alert and sound behavior in **Settings → General → Thread
+notifications**. Allow notifications for T3 Code in macOS System Settings.
+
 ## Start a thread
 
 On web and desktop, **New thread** opens the project picker when you have more than one

@@ -547,6 +547,25 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("packages macOS with the Icon Composer icon under the plain product name", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "1.2.3",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+      const mac = config.mac as Record<string, unknown>;
+      const dmg = config.dmg as Record<string, unknown>;
+      assert.equal(mac.icon, "app-icon.icon");
+      assert.equal(dmg.icon, "icon.icns");
+      assert.equal(dmg.title, "T3 Code 1.2.3 Installer");
+    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
   it.effect("declares Calendar access for hosted commands in macOS builds", () =>
     Effect.gen(function* () {
       for (const version of ["0.1.0", "0.1.1-nightly.20261019.1"]) {

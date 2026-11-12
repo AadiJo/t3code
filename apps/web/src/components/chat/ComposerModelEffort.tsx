@@ -177,7 +177,7 @@ export function describeComposerEffort(
 }
 
 const COLUMN_ROW =
-  "flex h-8 w-full shrink-0 cursor-pointer items-center gap-2 rounded-sm px-2 text-left text-sm text-foreground outline-none hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09] disabled:cursor-not-allowed disabled:opacity-64";
+  "flex h-8 w-full shrink-0 cursor-pointer items-center gap-2 rounded-sm px-2 text-left text-sm text-foreground outline-none hover:bg-sidebar-row-hover focus-visible:bg-sidebar-row-hover disabled:cursor-not-allowed disabled:opacity-64";
 const COLUMN_LABEL = "px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs";
 
 function ColumnRow(props: {
@@ -396,7 +396,7 @@ function OptionMenuRow(props: {
             data-effort-row
             tabIndex={props.tabStop ? 0 : -1}
             aria-label={`${descriptor.label}: ${current}`}
-            className={cn(OPTION_ROW, "data-popup-open:bg-foreground/[0.09]")}
+            className={cn(OPTION_ROW, "data-popup-open:bg-sidebar-row-hover")}
             onKeyDown={(event) => {
               if (event.key !== "ArrowRight") return;
               event.preventDefault();
@@ -469,7 +469,7 @@ function OptionSwitchRow(props: {
   const { descriptor, traits } = props;
   const checked = descriptor.currentValue === true;
   return (
-    <label className={cn(OPTION_ROW, "has-focus-visible:bg-foreground/[0.09]")}>
+    <label className={cn(OPTION_ROW, "has-focus-visible:bg-sidebar-row-hover")}>
       <OptionRowText label={descriptor.label} value={checked ? "On" : "Off"} />
       <Switch
         size="sm"
@@ -637,7 +637,7 @@ function PermissionsMenu(props: {
             type="button"
             data-composer-permissions-trigger
             aria-label={`Permissions: ${current.label}`}
-            className="ms-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-muted-foreground text-xs outline-none hover:bg-foreground/[0.09] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-popup-open:bg-foreground/[0.09] data-popup-open:text-foreground"
+            className="ms-auto flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2 text-muted-foreground text-xs outline-none hover:bg-sidebar-row-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-popup-open:bg-sidebar-row-hover data-popup-open:text-foreground"
           />
         }
       >

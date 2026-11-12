@@ -31,6 +31,7 @@ import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { AttachmentFilePreview } from "../files/AttachmentFilePreview";
 import { AttachmentImage } from "../media/AttachmentImage";
 import { Button } from "../ui/button";
+import { composerIconActionClassName } from "./ComposerControl";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
@@ -728,18 +729,22 @@ export function ComposerAttachButton({
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              className={composerIconActionClassName()}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => inputRef.current?.click()}
               aria-label="Attach files"
             />
           }
         >
-          {/* The clip's weight sits in its upper loop; 1px down reads as centered on the row. */}
-          <PaperclipIcon className="translate-y-px" />
+          {/* The clip's weight sits in its upper loop, so 1px down reads as centered. Its ink
+              starts 0.5px nearer its box edge than the send arrow's ends, hence the nudge. */}
+          <PaperclipIcon
+            className="size-3.5 translate-x-[0.5px] translate-y-px"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
         </TooltipTrigger>
         <TooltipPopup>Attach files</TooltipPopup>
       </Tooltip>

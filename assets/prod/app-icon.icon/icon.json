@@ -1,7 +1,5 @@
 {
-  "fill": {
-    "solid": "display-p3:0.00000,0.00000,0.00000,1.00000"
-  },
+  "fill": "system-dark",
   "groups": [
     {
       "layers": [

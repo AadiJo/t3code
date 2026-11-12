@@ -18,6 +18,7 @@ import {
   ShieldQuestionIcon,
 } from "lucide-react";
 
+import { notificationBridge } from "../desktopNotifications";
 import { getClientSettings, subscribeClientSettings } from "../hooks/useSettings";
 import { isWindowsPlatform } from "../lib/utils";
 import { environmentSummaries } from "../state/presentation";
@@ -45,6 +46,7 @@ interface NotificationState extends ThreadNotificationObservation {
   readonly subagentRequest: PendingSubagentRequest | null;
   readonly thread: EnvironmentThreadShell;
   readonly status: SidebarThreadStatus;
+  readonly waiting: boolean;
 }
 
 type ToastId = ReturnType<typeof toastManager.add>;
@@ -154,6 +156,11 @@ export function startThreadNotifications(
       (active.environmentId !== environmentId || active.threadId !== thread.id)
     ) {
       const toastKey = threadKey({ environmentId, threadId: thread.id });
+      // A newer alert for the same thread replaces it instead of stacking, like the tag on
+      // system notifications.
+      for (const previousToastId of openToasts.get(toastKey) ?? []) {
+        toastManager.close(previousToastId);
+      }
       const toastId: ToastId = toastManager.add({
         onRemove: (): void => forgetToast(toastKey, toastId),
         type: kind === "completion" ? "success" : status === "failed" ? "error" : "warning",
@@ -188,7 +195,9 @@ export function startThreadNotifications(
       openToasts.set(toastKey, [...(openToasts.get(toastKey) ?? []), toastId]);
       return;
     }
+    // The macOS desktop app shows its own native notifications.
     if (
+      notificationBridge() ||
       !hasDesktopNotifications(mode) ||
       (document.visibilityState === "visible" && document.hasFocus()) ||
       typeof Notification === "undefined" ||
@@ -264,19 +273,24 @@ export function startThreadNotifications(
       const attention = needsAttention
         ? `${thread.latestRun?.runId ?? ""}:${status}:${requestId ?? ""}`
         : null;
-      const completed = status === "ready" && thread.latestRun?.status === "completed";
-      const settled = completed && !monitorHoldsWakeCompletion(rawThread);
+      const completed = thread.latestRun?.status === "completed";
+      const settled = status === "ready" && completed && !monitorHoldsWakeCompletion(rawThread);
+      // A completion seen while waiting is remembered without an alert, so the moment
+      // that work stops (before the agent wakes and continues) cannot announce it.
+      const waiting = status === "waiting";
       const parsedCompletedAt = Date.parse(thread.latestRun?.completedAt ?? "");
       const completedAt = Number.isFinite(parsedCompletedAt) ? parsedCompletedAt : null;
+
       const state = {
         raw: rawThread,
         subagentRequest,
         thread,
         status,
+        waiting,
         attention,
         requestId,
         settled,
-        completedAt: settled ? completedAt : null,
+        completedAt: settled || (waiting && completed) ? completedAt : null,
         backgroundWake: rawThread.latestRunBackgroundWake === true,
       };
       next.set(thread.id, state);
@@ -287,8 +301,9 @@ export function startThreadNotifications(
     entry.gate.retain(new Set(next.keys()));
     for (const [prior, state] of changed) {
       entry.gate.observe(state.thread.id, prior, state, {
-        archived: state.thread.archivedAt !== null,
-        quiet: state.raw.latestRunStopRequested === true,
+        // Memory is recorded first, so reopening a settled thread stays silent.
+        archived: state.thread.archivedAt !== null || state.thread.settledOverride === "settled",
+        quiet: state.raw.latestRunStopRequested === true || state.waiting,
       });
     }
   };

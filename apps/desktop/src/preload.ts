@@ -1,5 +1,6 @@
 import type {
   DesktopBridge,
+  DesktopNotification,
   DesktopPreviewAnnotationVoiceEvent,
   DesktopPreviewOpenLinkEvent,
   DesktopPreviewPointerEvent,
@@ -86,6 +87,23 @@ function unwrapEnsureSshEnvironmentResult(result: unknown) {
 }
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  getNotifications: () => ipcRenderer.invoke(IpcChannels.GET_NOTIFICATIONS_CHANNEL),
+  syncNotifications: (snapshot) =>
+    ipcRenderer.invoke(IpcChannels.SYNC_NOTIFICATIONS_CHANNEL, snapshot),
+  updateNotifications: (command) =>
+    ipcRenderer.invoke(IpcChannels.UPDATE_NOTIFICATIONS_CHANNEL, command),
+  onNotifications: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, items: readonly DesktopNotification[]) =>
+      listener(items);
+    ipcRenderer.on(IpcChannels.NOTIFICATIONS_CHANGED_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(IpcChannels.NOTIFICATIONS_CHANGED_CHANNEL, handler);
+  },
+  onNotificationOpen: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, item: DesktopNotification) =>
+      listener(item);
+    ipcRenderer.on(IpcChannels.NOTIFICATION_OPEN_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(IpcChannels.NOTIFICATION_OPEN_CHANNEL, handler);
+  },
   getAppBranding: () => {
     const result = ipcRenderer.sendSync(IpcChannels.GET_APP_BRANDING_CHANNEL);
     if (typeof result !== "object" || result === null) {

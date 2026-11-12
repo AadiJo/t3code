@@ -131,6 +131,10 @@
       "types": "./src/platform/index.ts",
       "default": "./src/platform/index.ts"
     },
+    "./providerPickerOrder": {
+      "types": "./src/providerPickerOrder.ts",
+      "default": "./src/providerPickerOrder.ts"
+    },
     "./providerSkills": {
       "types": "./src/providerSkills.ts",
       "default": "./src/providerSkills.ts"

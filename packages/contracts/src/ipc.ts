@@ -1,4 +1,9 @@
 import * as Schema from "effect/Schema";
+import type {
+  DesktopNotification,
+  DesktopNotificationSnapshot,
+  DesktopNotificationCommand,
+} from "./desktopNotifications.ts";
 import type { PreviewCaptureFailureEncoded } from "./previewCapture.ts";
 
 import { SnapShotSource } from "./chatAttachment.ts";
@@ -1033,6 +1038,11 @@ export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
 export interface DesktopBridge {
+  getNotifications?: () => Promise<readonly DesktopNotification[]>;
+  syncNotifications?: (snapshot: DesktopNotificationSnapshot) => Promise<void>;
+  updateNotifications?: (command: DesktopNotificationCommand) => Promise<void>;
+  onNotifications?: (listener: (items: readonly DesktopNotification[]) => void) => () => void;
+  onNotificationOpen?: (listener: (item: DesktopNotification) => void) => () => void;
   getAppBranding: () => DesktopAppBranding | null;
   getRelayTelemetryEnabled: () => boolean;
   getPathForFile: (file: File) => string;

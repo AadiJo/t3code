@@ -1,6 +1,31 @@
 import type { ProviderDriverKind } from "@t3tools/contracts";
 import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
 
+const MUSE_SPARK_MODEL_PREFIX = "opencode/muse-spark-";
+const CURSOR_GROK_MODEL_PREFIX = "grok-";
+const CURSOR_GEMINI_MODEL_PREFIX = "gemini-";
+
+export function usesMetaModelIcon(
+  driverKind: ProviderDriverKind,
+  model: string | undefined,
+): boolean {
+  return driverKind === "opencode" && model?.startsWith(MUSE_SPARK_MODEL_PREFIX) === true;
+}
+
+export function usesGrokModelIcon(
+  driverKind: ProviderDriverKind,
+  model: string | undefined,
+): boolean {
+  return driverKind === "cursor" && model?.startsWith(CURSOR_GROK_MODEL_PREFIX) === true;
+}
+
+export function usesGeminiModelIcon(
+  driverKind: ProviderDriverKind,
+  model: string | undefined,
+): boolean {
+  return driverKind === "cursor" && model?.startsWith(CURSOR_GEMINI_MODEL_PREFIX) === true;
+}
+
 export type ModelEsque = {
   slug: string;
   name: string;

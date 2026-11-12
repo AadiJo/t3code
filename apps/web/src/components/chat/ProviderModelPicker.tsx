@@ -342,6 +342,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               .join(", ")}
             size={size}
             data-chat-provider-model-picker="true"
+            data-composer-control-open={isMenuOpen}
             data-composer-shortcut={props.triggerShortcuts}
             onClick={(event) => {
               if (!isMenuOpen || !docked) return;
@@ -400,6 +401,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <span data-chat-provider-model-picker-icon className="contents">
               <ProviderInstanceIcon
                 driverKind={activeEntry.driverKind}
+                model={props.model}
                 displayName={activeEntry.displayName}
                 accentColor={activeEntry.accentColor}
                 acpRegistryAgentId={activeEntry.acpRegistryAgentId}
@@ -457,7 +459,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <div className="flex max-h-(--available-height) flex-col">
               {/* One fixed height, so a model with more options never resizes the popup. Short
                   windows shrink it and keep the footer. */}
-              <div className="flex h-86.5 min-h-0 max-sm:h-auto max-sm:flex-col">
+              <div className="flex h-80 min-h-0 max-sm:h-auto max-sm:flex-col">
                 {picker}
                 <div
                   data-model-picker-effort

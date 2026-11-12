@@ -193,6 +193,23 @@ function makeLatestRun(overrides?: {
   };
 }
 
+describe("hasUnseenCompletion", () => {
+  it("shows Done for an unread completion notification without a recorded thread visit", () => {
+    expect(
+      hasUnseenCompletion({
+        hasActionableProposedPlan: false,
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+        interactionMode: "default",
+        latestRun: null,
+        lastVisitedAt: undefined,
+        runtime: null,
+        hasUnreadCompletionNotification: true,
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("orderItemsByPreferredIds", () => {
   it("resolves legacy preference aliases without materializing project state", () => {
     const ordered = orderItemsByPreferredIds({

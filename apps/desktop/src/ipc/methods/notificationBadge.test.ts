@@ -42,6 +42,30 @@ beforeEach(() => {
   native.listeners.clear();
 });
 
+it.effect("leaves the macOS Dock badge to the durable notification inbox", () =>
+  Effect.gen(function* () {
+    const handlers = new Map<string, DesktopIpc.DesktopIpcHandleListener>();
+    yield* installNotificationBadge().pipe(
+      Effect.provideService(HostProcess.Platform, "darwin"),
+      Effect.provide([
+        ElectronApp.layer,
+        DesktopIpc.layerTest({
+          handle: (channel, handler) => {
+            handlers.set(channel, handler);
+          },
+          removeHandler: (channel) => {
+            handlers.delete(channel);
+          },
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
+        }),
+      ]),
+    );
+    expect(handlers.size).toBe(0);
+    expect(native.listeners.size).toBe(0);
+  }),
+);
+
 it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
   Effect.gen(function* () {
     const handlers = new Map<string, DesktopIpc.DesktopIpcHandleListener>();

@@ -44,22 +44,28 @@ export class PreferredEditorUnavailableError extends Schema.TaggedError<Preferre
   }
 }
 
+// VS Code comes before list order: the Cursor agent CLI installs a `cursor` shim on PATH,
+// which the editor probe reports as the Cursor editor even when only the agent is installed.
+function defaultEditor(availableEditors: ReadonlyArray<EditorId>): EditorId | null {
+  if (availableEditors.includes("vscode")) return "vscode";
+  return EDITORS.find((editor) => availableEditors.includes(editor.id))?.id ?? null;
+}
+
 export function usePreferredEditor(availableEditors: ReadonlyArray<EditorId>) {
   const [lastEditor, setLastEditor] = useLocalStorage(LAST_EDITOR_KEY, null, EditorId);
 
   const effectiveEditor =
     lastEditor && availableEditors.includes(lastEditor)
       ? lastEditor
-      : (EDITORS.find((editor) => availableEditors.includes(editor.id))?.id ?? null);
+      : defaultEditor(availableEditors);
 
   return [effectiveEditor, setLastEditor] as const;
 }
 
 function resolveAndPersistPreferredEditor(availableEditors: readonly EditorId[]): EditorId | null {
-  const availableEditorIds = new Set(availableEditors);
   const stored = getLocalStorageItem(LAST_EDITOR_KEY, EditorId);
-  if (stored && availableEditorIds.has(stored)) return stored;
-  const editor = EDITORS.find((editor) => availableEditorIds.has(editor.id))?.id ?? null;
+  if (stored && availableEditors.includes(stored)) return stored;
+  const editor = defaultEditor(availableEditors);
   if (editor) setLocalStorageItem(LAST_EDITOR_KEY, editor, EditorId);
   return editor ?? null;
 }

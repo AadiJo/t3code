@@ -58,6 +58,8 @@ it("records the visit of the next thread at once after switching threads", async
   mocks.visitRun.mockResolvedValue(AsyncResult.success(undefined));
   setShell(threadA, "2026-01-02T00:00:00.000Z");
   setShell(threadB, "2026-01-03T00:00:00.000Z");
+  // Visits record only while the window has focus, which a headless page lacks.
+  using _focused = vi.spyOn(document, "hasFocus").mockReturnValue(true);
   using _timers = fakeTimers();
   vi.setSystemTime(NOW);
   // A palette pick already sent B's open with its query, so B's visit is a plain watermark advance.

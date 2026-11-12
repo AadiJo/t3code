@@ -126,6 +126,7 @@ export const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* ()
 });
 
 interface DesktopBuildIconAssets {
+  readonly macIconComposerProject: string;
   readonly macIconPng: string;
   readonly linuxIconPng: string;
   readonly windowsIconIco: string;
@@ -2729,6 +2730,7 @@ export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
 export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
+      macIconComposerProject: BRAND_ASSET_PATHS.nightlyIconComposerProject,
       macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
       linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
@@ -2736,6 +2738,7 @@ export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIcon
   }
 
   return {
+    macIconComposerProject: BRAND_ASSET_PATHS.productionIconComposerProject,
     macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
     linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
     windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
@@ -2830,7 +2833,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const repoRoot = yield* RepoRoot;
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
-      icon: "icon.icns",
+      icon: "app-icon.icon",
       category: "public.app-category.developer-tools",
       extendInfo: {
         // macOS 26 offers Messages/Mail codes in every text field unless opted out.
@@ -2879,10 +2882,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           }
         : {}),
     };
+    buildConfig.dmg = {
+      icon: "icon.icns",
+    };
   }
 
   if (platform === "mac" && target === "dmg") {
     buildConfig.dmg = {
+      icon: "icon.icns",
       // Finder caches DMG backgrounds by volume name; give each installer its own.
       title: `${resolveDesktopProductName(version)} ${version} Installer`,
       background: `dmg/dmg-background-${updateChannel}.png`,
@@ -2986,6 +2993,18 @@ const assertPlatformBuildResources = Effect.fn("assertPlatformBuildResources")(f
   verbose: boolean,
 ) {
   if (platform === "mac") {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    if (!(yield* fs.exists(iconAssets.macIconComposerProject))) {
+      return yield* new DesktopIconSourceMissingError({
+        platform: "mac",
+        sourcePath: iconAssets.macIconComposerProject,
+      });
+    }
+    yield* fs.copy(
+      iconAssets.macIconComposerProject,
+      path.join(stageResourcesDir, "app-icon.icon"),
+    );
     yield* stageMacIcons(stageResourcesDir, iconAssets.macIconPng, verbose);
     return;
   }
@@ -3800,6 +3819,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     options.platform,
     stageResourcesDir,
     {
+      macIconComposerProject: path.join(repoRoot, iconAssets.macIconComposerProject),
       macIconPng: path.join(repoRoot, iconAssets.macIconPng),
       linuxIconPng: path.join(repoRoot, iconAssets.linuxIconPng),
       windowsIconIco: path.join(repoRoot, iconAssets.windowsIconIco),

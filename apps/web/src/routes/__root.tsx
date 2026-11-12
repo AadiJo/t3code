@@ -54,6 +54,7 @@ import { useHostedPromptLinkLanding } from "../components/promptLinks/HostedProm
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
 import { useAtomValue } from "@effect/atom-react";
 import { primaryServerConfigAtom, primaryServerWelcomeAtom } from "../state/server";
+import { DesktopNotificationCoordinator } from "../components/desktop/DesktopNotificationCoordinator";
 import { readProject } from "../state/entities";
 
 import { getDesktopSnapShotBridge } from "../lib/desktopSnapShot";
@@ -193,6 +194,7 @@ function RootRouteBranch() {
       <ProjectCloneToastCoordinator />
       <AddProjectToMachineDialogHost />
       <UseInAnotherAppDialogHost />
+      <DesktopNotificationCoordinator />
       {import.meta.env.DEV && primaryEnvironmentAuthenticated ? <DevReplayHost /> : null}
     </>
   );

@@ -71,12 +71,15 @@ const layerElectronApp = (calls: ElectronAppCalls) =>
     on: () => Effect.void,
   } satisfies ElectronApp.ElectronApp["Service"]);
 
-const layerAssets = (png: Option.Option<string>) =>
+const layerAssets = (input: {
+  readonly icns: Option.Option<string>;
+  readonly png: Option.Option<string>;
+}) =>
   Layer.succeed(DesktopAssets.DesktopAssets, {
     iconPaths: Effect.succeed({
       ico: Option.none(),
-      icns: Option.none(),
-      png,
+      icns: input.icns,
+      png: input.png,
     }),
     resolveResourcePath: () => Effect.succeedNone,
   } satisfies DesktopAssets.DesktopAssets["Service"]);
@@ -114,6 +117,7 @@ const withIdentity = <A, E, R>(
     readonly legacyPathExists?: boolean;
     readonly legacyPathProbeError?: PlatformError.PlatformError;
     readonly packageJson?: string;
+    readonly icnsIconPath?: Option.Option<string>;
     readonly pngIconPath?: Option.Option<string>;
   } = {},
 ) => {
@@ -139,7 +143,12 @@ const withIdentity = <A, E, R>(
               Effect.succeed(input.packageJson ?? '{"t3codeCommitHash":"abcdef1234567890"}'),
           }),
         ),
-        Layer.provideMerge(layerAssets(input.pngIconPath ?? Option.none())),
+        Layer.provideMerge(
+          layerAssets({
+            icns: input.icnsIconPath ?? Option.none(),
+            png: input.pngIconPath ?? Option.none(),
+          }),
+        ),
         Layer.provideMerge(layerElectronApp(calls)),
         Layer.provideMerge(layerEnvironment(input.environment)),
       ),
@@ -177,16 +186,46 @@ describe("DesktopAppIdentity", () => {
   );
 
   it.effect.each([
-    { stage: "Beta", environment: {} },
+    { stage: "Beta", environment: {}, name: "T3 Code", aboutName: "T3 Code" },
     {
       stage: "Nightly",
       environment: { appVersion: "0.0.43-nightly.20260929.2428" },
+      name: "T3 Code Nightly",
+      aboutName: "T3 Code (Nightly)",
     },
     {
       stage: "Dev",
       environment: { env: { VITE_DEV_SERVER_URL: "http://localhost:5173" } },
+      name: "T3 Code Dev",
+      aboutName: "T3 Code (Dev)",
     },
-  ])("uses a valid native User-Agent product name for $stage", ({ stage, environment }) => {
+  ])(
+    "uses a valid native User-Agent product name for $stage",
+    ({ environment, name, aboutName }) => {
+      const calls: ElectronAppCalls = {
+        setAboutPanelOptions: [],
+        setDockIcon: [],
+        setName: [],
+      };
+
+      return withIdentity(
+        Effect.gen(function* () {
+          const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+          yield* identity.configure;
+
+          const runtimeName = calls.setName[0];
+          assert.isDefined(runtimeName);
+          assert.equal(runtimeName, name);
+          // RFC 9110's token grammar, after Electron removes ASCII spaces.
+          assert.match(runtimeName.replaceAll(" ", ""), /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
+          assert.equal(calls.setAboutPanelOptions[0]?.applicationName, aboutName);
+        }),
+        { calls, environment },
+      );
+    },
+  );
+
+  it.effect("sets the Dock icon for a loose macOS Electron run", () => {
     const calls: ElectronAppCalls = {
       setAboutPanelOptions: [],
       setDockIcon: [],
@@ -198,13 +237,38 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         yield* identity.configure;
 
-        const runtimeName = calls.setName[0];
-        assert.isDefined(runtimeName);
-        assert.equal(runtimeName, `T3 Code ${stage}`);
-        assert.match(runtimeName.replaceAll(" ", ""), /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `T3 Code (${stage})`);
+        // Electron shows a generic icon for an unpackaged run, which is the
+        // reason this call exists at all.
+        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
       }),
-      { calls, environment },
+      {
+        calls,
+        environment: { isPackaged: false },
+        pngIconPath: Option.some("/icon.png"),
+      },
+    );
+  });
+
+  it.effect("keeps the native icon stack for the unpackaged macOS launcher bundle", () => {
+    const calls: ElectronAppCalls = {
+      setAboutPanelOptions: [],
+      setDockIcon: [],
+      setName: [],
+    };
+
+    return withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        yield* identity.configure;
+
+        assert.deepEqual(calls.setDockIcon, []);
+      }),
+      {
+        calls,
+        environment: { isPackaged: false },
+        icnsIconPath: Option.some("/bundle/Contents/Resources/icon.icns"),
+        pngIconPath: Option.some("/repo/assets/prod/black-macos-1024.png"),
+      },
     );
   });
 });

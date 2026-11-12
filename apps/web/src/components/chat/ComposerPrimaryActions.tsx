@@ -1,18 +1,20 @@
 import { memo, type MouseEventHandler, type PointerEventHandler, type ReactNode } from "react";
 import {
+  ArrowLeftIcon,
   CheckIcon,
-  ChevronLeftIcon,
-  Minimize2Icon,
-  PlayIcon,
+  CornerDownLeftIcon,
   CornerUpRightIcon,
   ListPlusIcon,
+  Minimize2Icon,
+  PlayIcon,
+  SquareIcon,
 } from "lucide-react";
+import { composerIconActionClassName } from "./ComposerControl";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn, isMacPlatform } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
 import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
-import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -59,25 +61,18 @@ interface ComposerPrimaryActionsProps {
 }
 
 const formatPendingPrimaryActionLabel = (input: {
-  compact: boolean;
   isLastQuestion: boolean;
   isResponding: boolean;
   questionIndex: number;
 }) => {
   if (input.isResponding) {
-    return "Submitting...";
-  }
-  if (input.compact) {
-    return input.isLastQuestion ? "Submit" : "Next";
+    return "Submitting";
   }
   if (!input.isLastQuestion) {
     return "Next question";
   }
   return input.questionIndex > 0 ? "Submit answers" : "Submit answer";
 };
-
-const messageActionPillClassName =
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-message-action font-medium text-base text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:text-sm";
 
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
   event.preventDefault();
@@ -127,16 +122,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const isSendDisabled = !canOperateThread || sendDisabledReason !== null;
   const stageBackdropVariant = useSidebarStageBackdropVariant(environmentIdentificationMode);
 
-  const renderStopGenerationButton = (insidePendingAction: boolean) => (
+  const renderStopGenerationButton = () => (
     <Tooltip key="interrupt">
       <TooltipTrigger
         render={
           <button
             type="button"
-            className={cn(
-              "flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none",
-              insidePendingAction ? "size-8 sm:size-7" : "size-8 sm:h-8 sm:w-8",
-            )}
+            className="flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground/70 transition-[background-color,color,scale] duration-150 ease-out hover:bg-sidebar-row-hover active:scale-[0.97] active:bg-accent sm:size-7 [&_svg]:pointer-events-none"
             {...pointerFocusProps}
             disabled={!canOperateThread}
             onClick={() => {
@@ -146,9 +138,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           />
         }
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-          <rect x="2" y="2" width="8" height="8" rx="1.5" />
-        </svg>
+        {/* Straight edges read thinner than the send arrow's diagonals at the same stroke. */}
+        <SquareIcon className="size-3.5" strokeWidth={2.2} aria-hidden="true" />
       </TooltipTrigger>
       <TooltipPopup>Interrupt</TooltipPopup>
     </Tooltip>
@@ -157,35 +148,23 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   if (pendingAction) {
     return (
       <div className={cn("flex items-center justify-end", compact ? "gap-1.5" : "gap-2")}>
-        {canInterrupt ? renderStopGenerationButton(true) : null}
+        {canInterrupt ? renderStopGenerationButton() : null}
         {pendingAction.questionIndex > 0 ? (
-          compact ? (
-            <Button
-              size="icon-sm"
-              variant="outline"
-              {...pointerFocusProps}
-              onClick={onPreviousPendingQuestion}
-              disabled={pendingAction.isResponding}
-              aria-label="Previous question"
-            >
-              <ChevronLeftIcon className="size-3.5" />
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              {...pointerFocusProps}
-              onClick={onPreviousPendingQuestion}
-              disabled={pendingAction.isResponding}
-            >
-              Previous
-            </Button>
-          )
+          <button
+            type="button"
+            className={composerIconActionClassName(false)}
+            {...pointerFocusProps}
+            onClick={onPreviousPendingQuestion}
+            disabled={pendingAction.isResponding}
+            aria-label="Previous question"
+          >
+            <ArrowLeftIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
+          </button>
         ) : null}
         {children}
         <button
           type="submit"
-          className={cn(messageActionPillClassName, "h-8 sm:h-7", compact ? "px-3" : "px-4")}
+          className={composerIconActionClassName(false)}
           {...pointerFocusProps}
           disabled={
             !canOperateThread ||
@@ -197,13 +176,17 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
                 ? !pendingAction.isComplete
                 : !pendingAction.canAdvance))
           }
-        >
-          {formatPendingPrimaryActionLabel({
-            compact,
+          aria-label={formatPendingPrimaryActionLabel({
             isLastQuestion: pendingAction.isLastQuestion,
             isResponding: pendingAction.isResponding,
             questionIndex: pendingAction.questionIndex,
           })}
+        >
+          {pendingAction.isResponding ? (
+            <Spinner size="sm" aria-hidden="true" />
+          ) : (
+            <CornerDownLeftIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
+          )}
         </button>
       </div>
     );
@@ -213,7 +196,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     return (
       <>
         {children}
-        {renderStopGenerationButton(false)}
+        {renderStopGenerationButton()}
       </>
     );
   }
@@ -258,12 +241,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const sendButton = (
     <button
       type={showResume ? "button" : "submit"}
-      className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110 disabled:opacity-64"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover disabled:bg-foreground/12 disabled:text-muted-foreground",
-      )}
+      className={composerIconActionClassName(stageBackdropVariant !== null)}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
       disabled={
@@ -279,26 +257,18 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <StageBackdropButtonArt variant={stageBackdropVariant} />
         </span>
       ) : null}
-      {isSendBusy ? (
+      {isSendBusy || isPreparingWorktree ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
-        <PlayIcon className="size-4 fill-current" aria-hidden="true" />
+        <PlayIcon className="size-3.5 fill-current" strokeWidth={1.8} aria-hidden="true" />
       ) : isEditingQueuedMessage ? (
-        <CheckIcon className="size-4" aria-hidden="true" />
+        <CheckIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
       ) : isRunning && isQueuing ? (
-        <ListPlusIcon className="size-4" aria-hidden="true" />
+        <ListPlusIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
       ) : isRunning ? (
-        <CornerUpRightIcon className="size-4" aria-hidden="true" />
+        <CornerUpRightIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
       ) : (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path
-            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <CornerDownLeftIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
       )}
     </button>
   );

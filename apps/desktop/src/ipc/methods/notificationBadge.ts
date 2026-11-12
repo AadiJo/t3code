@@ -46,6 +46,8 @@ export const installNotificationBadge = Effect.fn("desktop.ipc.installNotificati
     const ipc = yield* DesktopIpc.DesktopIpc;
     const app = yield* ElectronApp.ElectronApp;
     const platform = yield* HostProcess.Platform;
+    // The macOS notification inbox owns its durable unread Dock badge.
+    if (platform === "darwin") return;
     const clear = () => {
       applyNotificationBadge(platform, { count: 0, image: null });
       for (const window of Electron.BrowserWindow.getAllWindows()) {

@@ -773,6 +773,47 @@ describe("MessagesTimeline messages", () => {
     await click(screen.button("Safe details"));
     expect((globalThis as { __t3Xss?: number }).__t3Xss).toBeUndefined();
   });
+
+  it("stays at the end until the composer covers a sliver of the last reply", async () => {
+    const onIsAtEndChange = vi.fn();
+    const composerInset = 200;
+    const runId = RunId.make("run-1");
+    const text = Array.from({ length: 80 }, (_, line) => `Paragraph ${line + 1}.`).join("\n\n");
+    await using screen = await renderTimeline(
+      [message(text, { role: "assistant", runId }, "assistant-1")],
+      {
+        contentInsetEndAdjustment: composerInset,
+        onIsAtEndChange,
+        latestRun: { runId, status: "completed", startedAt: CREATED_AT, completedAt: CREATED_AT },
+      },
+    );
+    const scroller = screen.container.querySelector<HTMLElement>(".messages-timeline-scroll")!;
+    const end = () => scroller.scrollHeight - scroller.clientHeight;
+    // The timeline reports its end state a frame after the scroll.
+    const scrollTo = async (top: number) => {
+      const reported = onIsAtEndChange.mock.calls.length;
+      await act(async () => {
+        scroller.scrollTop = top;
+        scroller.dispatchEvent(new Event("scroll"));
+      });
+      await vi.waitFor(() => expect(onIsAtEndChange.mock.calls.length).toBeGreaterThan(reported));
+      return onIsAtEndChange.mock.lastCall?.[0];
+    };
+    await vi.waitFor(() => expect(end()).toBeGreaterThan(1000));
+    await vi.waitFor(() =>
+      expect(screen.container.querySelector("[data-assistant-message-meta]")).not.toBeNull(),
+    );
+    expect(await scrollTo(end())).toBe(true);
+
+    const reply = screen.container.querySelector<HTMLElement>("[data-thread-find-text]")!;
+    const composerTop = scroller.getBoundingClientRect().bottom - composerInset;
+    // The action row and the space around it, more than the plain end slack.
+    const replyClearance = composerTop - reply.getBoundingClientRect().bottom;
+    expect(replyClearance).toBeGreaterThan(40);
+
+    expect(await scrollTo(end() - replyClearance - 4)).toBe(true);
+    expect(await scrollTo(end() - replyClearance - 14)).toBe(false);
+  });
 });
 
 function usageLimitEntries(resetAt: string) {

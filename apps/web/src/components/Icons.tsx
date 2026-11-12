@@ -132,6 +132,19 @@ export const CursorIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+// Grok brand mark from SVGL: https://svgl.app/library/grok-light.svg
+export const GrokIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={cn("fill-[#0F0F0F] dark:fill-[#F5F5F5]", className)}
+  >
+    <path d="M9.26905 15.284L17.2479 9.36086C17.6391 9.07047 18.1981 9.18374 18.3845 9.63478C19.3655 12.0135 18.9272 14.8721 16.9755 16.8349C15.0238 18.7976 12.3082 19.228 9.8261 18.2477L7.1146 19.5102C11.0037 22.1834 15.7263 21.5223 18.6774 18.5525C21.0182 16.1985 21.7432 12.9897 21.0653 10.0961L21.0714 10.1023C20.0884 5.85143 21.3131 4.15233 23.8218 0.677913C23.8812 0.595532 23.9406 0.513151 24 0.428711L20.6987 3.74866V3.73836L9.267 15.2861" />
+    <path d="M7.62249 16.7237C4.83113 14.0422 5.3124 9.89222 7.69417 7.49905C9.45541 5.72786 12.341 5.00497 14.86 6.06768L17.5653 4.81138C17.0779 4.45714 16.4533 4.07613 15.7365 3.80839C12.4966 2.46764 8.6178 3.13492 5.98413 5.78141C3.45081 8.32904 2.65415 12.2463 4.02219 15.5889C5.04412 18.0871 3.36889 19.8541 1.68137 21.6377C1.08337 22.2699 0.483318 22.9022 0 23.5716L7.62045 16.7257" />
+  </svg>
+);
+
 export const TraeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 24 24" fill="currentColor">
     {}
@@ -428,6 +441,142 @@ export const ClaudeAI: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+// Gemini brand mark from SVGL: https://svgl.app/library/gemini.svg
+export const Gemini: Icon = (props) => (
+  <svg {...props} viewBox="0 0 296 298" fill="none">
+    <mask
+      id="gemini__a"
+      width="296"
+      height="298"
+      x="0"
+      y="0"
+      maskUnits="userSpaceOnUse"
+      style={{ maskType: "alpha" }}
+    >
+      <path
+        fill="#3186FF"
+        d="M141.201 4.886c2.282-6.17 11.042-6.071 13.184.148l5.985 17.37a184.004 184.004 0 0 0 111.257 113.049l19.304 6.997c6.143 2.227 6.156 10.91.02 13.155l-19.35 7.082a184.001 184.001 0 0 0-109.495 109.385l-7.573 20.629c-2.241 6.105-10.869 6.121-13.133.025l-7.908-21.296a184 184 0 0 0-109.02-108.658l-19.698-7.239c-6.102-2.243-6.118-10.867-.025-13.132l20.083-7.467A183.998 183.998 0 0 0 133.291 26.28l7.91-21.394Z"
+      />
+    </mask>
+    <g mask="url(#gemini__a)">
+      <g filter="url(#gemini__b)">
+        <ellipse cx="163" cy="149" fill="#3689FF" rx="196" ry="159" />
+      </g>
+      <g filter="url(#gemini__c)">
+        <ellipse cx="33.5" cy="142.5" fill="#F6C013" rx="68.5" ry="72.5" />
+      </g>
+      <g filter="url(#gemini__d)">
+        <ellipse cx="19.5" cy="148.5" fill="#F6C013" rx="68.5" ry="72.5" />
+      </g>
+      <g filter="url(#gemini__e)">
+        <path fill="#FA4340" d="M194 10.5C172 82.5 65.5 134.333 22.5 135L144-66l50 76.5Z" />
+      </g>
+      <g filter="url(#gemini__f)">
+        <path fill="#FA4340" d="M190.5-12.5C168.5 59.5 62 111.333 19 112L140.5-89l50 76.5Z" />
+      </g>
+      <g filter="url(#gemini__g)">
+        <path fill="#14BB69" d="M194.5 279.5C172.5 207.5 66 155.667 23 155l121.5 201 50-76.5Z" />
+      </g>
+      <g filter="url(#gemini__h)">
+        <path fill="#14BB69" d="M196.5 320.5C174.5 248.5 68 196.667 25 196l121.5 201 50-76.5Z" />
+      </g>
+    </g>
+    <defs>
+      <filter
+        id="gemini__b"
+        width="464"
+        height="390"
+        x="-69"
+        y="-46"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="18" />
+      </filter>
+      <filter
+        id="gemini__c"
+        width="265"
+        height="273"
+        x="-99"
+        y="6"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="32" />
+      </filter>
+      <filter
+        id="gemini__d"
+        width="265"
+        height="273"
+        x="-113"
+        y="12"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="32" />
+      </filter>
+      <filter
+        id="gemini__e"
+        width="299.5"
+        height="329"
+        x="-41.5"
+        y="-130"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="32" />
+      </filter>
+      <filter
+        id="gemini__f"
+        width="299.5"
+        height="329"
+        x="-45"
+        y="-153"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="32" />
+      </filter>
+      <filter
+        id="gemini__g"
+        width="299.5"
+        height="329"
+        x="-41"
+        y="91"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="32" />
+      </filter>
+      <filter
+        id="gemini__h"
+        width="299.5"
+        height="329"
+        x="-39"
+        y="132"
+        colorInterpolationFilters="sRGB"
+        filterUnits="userSpaceOnUse"
+      >
+        <feFlood floodOpacity="0" result="BackgroundImageFix" />
+        <feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+        <feGaussianBlur result="effect1_foregroundBlur_69_17998" stdDeviation="32" />
+      </filter>
+    </defs>
+  </svg>
+);
+
 // Brand marks from Simple Icons (CC0).
 export const OpenRouterIcon: Icon = ({ className, ...props }) => (
   <svg {...props} viewBox="0 0 24 24" className={cn("fill-current", className)}>
@@ -455,6 +604,53 @@ export const AntigravityIcon: Icon = (props) => (
     <image href={ANTIGRAVITY_ICON_DATA_URL} width="128" height="128" />
   </svg>
 );
+
+// Meta brand mark from SVGL: https://svgl.app/library/meta.svg
+export const MetaIcon: Icon = (props) => {
+  const gradientId = useId().replaceAll(":", "");
+  const horizontalGradientId = `${gradientId}-meta-horizontal`;
+  const verticalGradientId = `${gradientId}-meta-vertical`;
+
+  return (
+    <svg
+      {...props}
+      viewBox="0 0 256 171"
+      preserveAspectRatio="xMidYMid"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient
+          id={horizontalGradientId}
+          x1="13.878%"
+          x2="89.144%"
+          y1="55.934%"
+          y2="58.694%"
+        >
+          <stop offset="0%" stopColor="#0064E1" />
+          <stop offset="40%" stopColor="#0064E1" />
+          <stop offset="83%" stopColor="#0073EE" />
+          <stop offset="100%" stopColor="#0082FB" />
+        </linearGradient>
+        <linearGradient id={verticalGradientId} x1="54.315%" x2="54.315%" y1="82.782%" y2="39.307%">
+          <stop offset="0%" stopColor="#0082FB" />
+          <stop offset="100%" stopColor="#0064E0" />
+        </linearGradient>
+      </defs>
+      <path
+        fill="#0081FB"
+        d="M27.651 112.136c0 9.775 2.146 17.28 4.95 21.82 3.677 5.947 9.16 8.466 14.751 8.466 7.211 0 13.808-1.79 26.52-19.372 10.185-14.092 22.186-33.874 30.26-46.275l13.675-21.01c9.499-14.591 20.493-30.811 33.1-41.806C161.196 4.985 172.298 0 183.47 0c18.758 0 36.625 10.87 50.3 31.257C248.735 53.584 256 81.707 256 110.729c0 17.253-3.4 29.93-9.187 39.946-5.591 9.686-16.488 19.363-34.818 19.363v-27.616c15.695 0 19.612-14.422 19.612-30.927 0-23.52-5.484-49.623-17.564-68.273-8.574-13.23-19.684-21.313-31.907-21.313-13.22 0-23.859 9.97-35.815 27.75-6.356 9.445-12.882 20.956-20.208 33.944l-8.066 14.289c-16.203 28.728-20.307 35.271-28.408 46.07-14.2 18.91-26.324 26.076-42.287 26.076-18.935 0-30.91-8.2-38.325-20.556C2.973 139.413 0 126.202 0 111.148l27.651.988Z"
+      />
+      <path
+        fill={`url(#${horizontalGradientId})`}
+        d="M21.802 33.206C34.48 13.666 52.774 0 73.757 0 85.91 0 97.99 3.597 110.605 13.897c13.798 11.261 28.505 29.805 46.853 60.368l6.58 10.967c15.881 26.459 24.917 40.07 30.205 46.49 6.802 8.243 11.565 10.7 17.752 10.7 15.695 0 19.612-14.422 19.612-30.927l24.393-.766c0 17.253-3.4 29.93-9.187 39.946-5.591 9.686-16.488 19.363-34.818 19.363-11.395 0-21.49-2.475-32.654-13.007-8.582-8.083-18.615-22.443-26.334-35.352l-22.96-38.352C118.528 64.08 107.96 49.73 101.845 43.23c-6.578-6.988-15.036-15.428-28.532-15.428-10.923 0-20.2 7.666-27.963 19.39L21.802 33.206Z"
+      />
+      <path
+        fill={`url(#${verticalGradientId})`}
+        d="M73.312 27.802c-10.923 0-20.2 7.666-27.963 19.39-10.976 16.568-17.698 41.245-17.698 64.944 0 9.775 2.146 17.28 4.95 21.82L9.027 149.482C2.973 139.413 0 126.202 0 111.148 0 83.772 7.514 55.24 21.802 33.206 34.48 13.666 52.774 0 73.757 0l-.445 27.802Z"
+      />
+    </svg>
+  );
+};
 
 export const ACPRegistryIcon: Icon = ({ className, ...props }) => (
   <svg

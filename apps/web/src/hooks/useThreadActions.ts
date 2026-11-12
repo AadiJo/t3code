@@ -341,6 +341,7 @@ export function useThreadActions() {
   );
   const clearTerminalUiState = useTerminalUiStateStore((state) => state.clearTerminalUiState);
   const markThreadVisited = useUiStateStore((state) => state.markThreadVisited);
+  const recordThreadVisit = useAcknowledgeThreadWoke();
   const router = useRouter();
   const handleNewThread = useNewThreadHandler();
 
@@ -353,6 +354,12 @@ export function useThreadActions() {
       thread,
       threadRef: target,
     };
+  };
+  // Setting a thread aside (settle, snooze) dismisses its notifications on
+  // the desktop, so the sidebar's Done badge clears with them here too.
+  const acknowledgeCompletion = (target: ScopedThreadRef) => {
+    const completedAt = readThreadShell(target)?.latestRun?.completedAt;
+    if (completedAt) recordThreadVisit(target, completedAt);
   };
   const getCurrentRouteThreadRef = () => {
     const currentRouteParams = router.state.matches[router.state.matches.length - 1]?.params ?? {};
@@ -815,6 +822,7 @@ export function useThreadActions() {
     if (wokeAt !== null) {
       markThreadVisited(scopedThreadKey(target), wokeAt);
     }
+    acknowledgeCompletion(target);
     showThreadUndoNotice({
       action: "Settled",
       claim: action,
@@ -928,6 +936,7 @@ export function useThreadActions() {
       action.finish();
       return result;
     }
+    acknowledgeCompletion(target);
     showThreadUndoNotice({
       action: "Snoozed",
       claim: action,
