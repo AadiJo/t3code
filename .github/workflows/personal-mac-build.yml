@@ -1,0 +1,69 @@
+name: Personal macOS build
+
+# Builds an ad hoc signed arm64 macOS app for one machine. Not part of the release pipeline.
+on:
+  push:
+    branches: [mac-client-polish-build]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      # Same manual checkout as desktop-macos-preview.yml: the vendored .repos tree
+      # has orphaned gitlinks that break actions/checkout's cleanup.
+      - name: Checkout
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Public configuration
+        run: cp .env.example .env
+
+      - name: Build app
+        env:
+          # No update feed: an upstream release must not replace this build.
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: none
+          T3CODE_DESKTOP_OUTPUT_DIR: release
+        run: node scripts/build-desktop-artifact.ts --platform mac --target zip --arch arm64 --verbose
+
+      - name: Ad hoc sign
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip="$(ls release/*.zip | head -1)"
+          mkdir -p signed
+          ditto -x -k "$zip" signed
+          app="$(ls -d signed/*.app | head -1)"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist"
+          ditto -c -k --keepParent "$app" "T3-Code-mac-arm64.zip"
+
+      - name: Upload app
+        uses: actions/upload-artifact@v7
+        with:
+          name: t3code-mac-arm64
+          path: T3-Code-mac-arm64.zip
+          retention-days: 14
