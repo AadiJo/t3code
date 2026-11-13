@@ -1,6 +1,6 @@
-name: Personal macOS build
+name: Personal desktop builds
 
-# Builds an ad hoc signed arm64 macOS app for one machine. Not part of the release pipeline.
+# Builds unsigned desktop apps for personal machines. Not part of the release pipeline.
 on:
   push:
     branches: [mac-client-polish-build]
@@ -66,4 +66,49 @@ jobs:
         with:
           name: t3code-mac-arm64
           path: T3-Code-mac-arm64.zip
+          retention-days: 14
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Public configuration
+        shell: bash
+        run: cp .env.example .env
+
+      - name: Build installer
+        shell: bash
+        env:
+          # No update feed: an upstream release must not replace this build.
+          T3CODE_DESKTOP_UPDATE_REPOSITORY: none
+          T3CODE_DESKTOP_OUTPUT_DIR: release
+        run: node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64 --verbose
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: t3code-win-x64
+          path: release/*.exe
           retention-days: 14
