@@ -38,28 +38,39 @@ export function threadNotificationTag(environmentId: EnvironmentId, threadId: Th
 let originalFavicon: HTMLLinkElement | undefined;
 let badgeFavicon: HTMLLinkElement | undefined;
 
+function renderBadgeImage(count: number): string | null {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.fillStyle = "#e5484d";
+  context.beginPath();
+  context.arc(32, 32, 28, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "white";
+  context.font = `600 ${count > 9 ? 30 : 40}px "Segoe UI", sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(count > 9 ? "9+" : String(count), 32, 34);
+  return canvas.toDataURL("image/png");
+}
+
+/** The Windows taskbar overlay for the desktop inbox's unread count. */
+export function setInboxBadge(count: number) {
+  const bridge = window.desktopBridge;
+  if (bridge?.getClientPlatform?.() !== "win32") return;
+  const image = count > 0 ? renderBadgeImage(count) : null;
+  void bridge.setNotificationBadge({ count, image }).catch(() => undefined);
+}
+
 export function setNotificationBadge(count: number) {
   const bridge = window.desktopBridge;
-  const durableMacBadge =
-    bridge?.getClientPlatform?.() === "darwin" && bridge.syncNotifications !== undefined;
-  let image: string | null = null;
-  if (count > 0 && (!bridge || bridge.getClientPlatform() === "win32")) {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 64;
-    const context = canvas.getContext("2d");
-    if (context) {
-      context.fillStyle = "#e5484d";
-      context.beginPath();
-      context.arc(32, 32, 28, 0, Math.PI * 2);
-      context.fill();
-      context.fillStyle = "white";
-      context.font = `600 ${count > 9 ? 30 : 40}px "Segoe UI", sans-serif`;
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText(count > 9 ? "9+" : String(count), 32, 34);
-      image = canvas.toDataURL("image/png");
-    }
-  }
+  const platform = bridge?.getClientPlatform?.();
+  // The desktop inbox owns the badge where it runs.
+  const inboxBadge =
+    (platform === "darwin" || platform === "win32") && bridge?.syncNotifications !== undefined;
+  const image =
+    count > 0 && (!bridge || platform === "win32") && !inboxBadge ? renderBadgeImage(count) : null;
   if (!bridge) {
     if (image) {
       if (!badgeFavicon) {
@@ -79,7 +90,7 @@ export function setNotificationBadge(count: number) {
       originalFavicon = undefined;
     }
   }
-  if (!durableMacBadge) void bridge?.setNotificationBadge({ count, image }).catch(() => undefined);
+  if (!inboxBadge) void bridge?.setNotificationBadge({ count, image }).catch(() => undefined);
 }
 
 let audioContext: AudioContext | undefined;

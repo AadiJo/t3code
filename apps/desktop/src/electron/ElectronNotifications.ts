@@ -24,7 +24,24 @@ import {
   reconcileNotifications,
 } from "../notifications/model.ts";
 
-/** Owns saved unread state and native notifications for this desktop installation. */
+const escapeXml = (value: string) =>
+  value.replace(
+    /[<>&"']/g,
+    (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[char]!,
+  );
+
+/** A Windows toast whose activation arguments carry the inbox item id. */
+function windowsToastXml(input: { id: string; title: string; lines: readonly string[] }) {
+  const text = [input.title, ...input.lines]
+    .map((line) => `<text>${escapeXml(line)}</text>`)
+    .join("");
+  return `<toast launch="${escapeXml(input.id)}" activationType="foreground"><visual><binding template="ToastGeneric">${text}</binding></visual><audio silent="true"/></toast>`;
+}
+
+/**
+ * Owns saved unread state and native notifications for this desktop installation. macOS shows
+ * the unread count on the Dock here; on Windows the renderer draws it as a taskbar overlay.
+ */
 export const installElectronNotifications = Effect.fn("desktop.notifications.install")(
   function* () {
     const ipc = yield* DesktopIpc;
@@ -33,7 +50,8 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
     const path = yield* Path.Path;
     const environment = yield* DesktopEnvironment;
     const platform = yield* HostProcess.Platform;
-    if (platform !== "darwin") return;
+    if (platform !== "darwin" && platform !== "win32") return;
+    const mac = platform === "darwin";
     const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
     const lock = yield* Semaphore.make(1);
     const file = path.join(path.dirname(environment.clientSettingsPath), "notifications.json");
@@ -49,6 +67,8 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
       }),
     );
     const native = new Map<string, Notification>();
+    // Windows reports a toast click both on the live object and through activation.
+    const opened = new Set<string>();
     let pendingOpen: DesktopNotification | null = null;
     const focused = () => BrowserWindow.getAllWindows().some((window) => window.isFocused());
     const send = Effect.fn("ElectronNotifications.send")(function* (
@@ -73,13 +93,18 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
       yield* fs.rename(`${file}.tmp`, file);
       const unreadIds = new Set(next.items.filter((item) => !item.read).map((item) => item.id));
       const removed = state.items.filter((item) => !unreadIds.has(item.id)).map((item) => item.id);
-      if (removed.length) Notification.remove(removed);
-      for (const id of removed) native.delete(id);
+      if (mac && removed.length) Notification.remove(removed);
+      for (const id of removed) {
+        if (!mac) native.get(id)?.close();
+        native.delete(id);
+      }
       state = next;
-      app.setBadgeCount(unreadIds.size);
+      if (mac) app.setBadgeCount(unreadIds.size);
       yield* send(Channels.NOTIFICATIONS_CHANGED_CHANNEL, state.items);
     });
     const open = (id: string) => {
+      if (opened.has(id)) return;
+      opened.add(id);
       void runPromise(
         lock
           .withPermit(
@@ -105,15 +130,20 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
           ),
       );
     };
-    const retain = (notification: Notification) => {
-      native.set(notification.id, notification);
-      notification.on("click", () => open(notification.id));
+    const retain = (id: string, notification: Notification) => {
+      native.set(id, notification);
+      notification.on("click", () => open(id));
       // Dismissal does not acknowledge the underlying work.
       notification.on("failed", (_event, error) => {
         void runPromise(Effect.logError("Could not show notification.", error));
       });
     };
-    {
+    if (!mac) {
+      // Also covers toasts clicked in Action Center after a restart.
+      Notification.handleActivation(({ arguments: id }) => {
+        if (id.startsWith("t3-work-")) open(id);
+      });
+    } else {
       app.setBadgeCount(state.items.filter((item) => !item.read).length);
       const history = yield* Effect.promise(() => Notification.getHistory()).pipe(
         Effect.catchCause((cause) =>
@@ -125,7 +155,7 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
       for (const notification of history) {
         if (!notification.id.startsWith("t3-work-")) continue;
         if (state.items.some((item) => item.id === notification.id && !item.read))
-          retain(notification);
+          retain(notification.id, notification);
         else Notification.remove(notification.id);
       }
     }
@@ -184,14 +214,17 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
               for (const item of result.added) {
                 if (focused()) continue;
                 if (!Notification.isSupported()) continue;
+                const title = desktopNotificationTitles[item.kind];
+                const lines = [item.threadTitle, `${item.projectTitle} · ${item.environmentTitle}`];
                 const notification = new Notification({
                   id: item.id,
                   groupId: "t3-work",
-                  title: desktopNotificationTitles[item.kind],
-                  body: `${item.threadTitle}\n${item.projectTitle} · ${item.environmentTitle}`,
+                  title,
+                  body: lines.join("\n"),
                   silent: true,
+                  ...(mac ? {} : { toastXml: windowsToastXml({ id: item.id, title, lines }) }),
                 });
-                retain(notification);
+                retain(item.id, notification);
                 notification.show();
               }
             }),

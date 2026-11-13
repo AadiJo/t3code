@@ -22,18 +22,18 @@ function applyNotificationBadge(
   { count, image }: typeof NotificationBadge.Type,
 ): void {
   try {
-    if (Electron.BrowserWindow.getFocusedWindow()) count = 0;
+    if (platform !== "win32" && Electron.BrowserWindow.getFocusedWindow()) count = 0;
     if (platform === "win32") {
       const overlay = count > 0 && image ? Electron.nativeImage.createFromDataURL(image) : null;
       for (const window of Electron.BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
           window.setOverlayIcon(
             overlay?.isEmpty() ? null : overlay,
-            count > 0 ? `${count} threads with new notifications` : "",
+            count > 0 ? `${count} unread notifications` : "",
           );
         }
       }
-    } else if (platform === "darwin" || platform === "linux") {
+    } else if (platform === "linux") {
       Electron.app.setBadgeCount(count);
     }
   } catch (error) {
@@ -48,6 +48,8 @@ export const installNotificationBadge = Effect.fn("desktop.ipc.installNotificati
     const platform = yield* HostProcess.Platform;
     // The macOS notification inbox owns its durable unread Dock badge.
     if (platform === "darwin") return;
+    // Windows shows the inbox's unread count, so focusing the app does not clear it.
+    const durable = platform === "win32";
     const clear = () => {
       applyNotificationBadge(platform, { count: 0, image: null });
       for (const window of Electron.BrowserWindow.getAllWindows()) {
@@ -61,12 +63,12 @@ export const installNotificationBadge = Effect.fn("desktop.ipc.installNotificati
         result: Schema.Void,
         handler: (badge) =>
           Effect.sync(() => {
-            if (badge.count > 0 && Electron.BrowserWindow.getFocusedWindow()) clear();
+            if (!durable && badge.count > 0 && Electron.BrowserWindow.getFocusedWindow()) clear();
             else applyNotificationBadge(platform, badge);
           }),
       }),
     );
-    yield* app.on("browser-window-focus", clear);
+    if (!durable) yield* app.on("browser-window-focus", clear);
     yield* app.on("before-quit", clear);
     yield* Effect.addFinalizer(() => Effect.sync(clear));
   },

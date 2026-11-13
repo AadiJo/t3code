@@ -25,6 +25,7 @@ import { environmentShell } from "../../state/shell";
 import { resolveThreadRouteRef } from "../../threadRoutes";
 import { useClientSettings } from "../../hooks/useSettings";
 import { resolveSidebarThreadStatus } from "../Sidebar.logic";
+import { setInboxBadge } from "../../threadNotifications";
 
 function EnvironmentNotifications({
   environmentId,
@@ -126,6 +127,11 @@ export function DesktopNotificationCoordinator() {
       recordThreadVisit(thread, visitedAt);
     }
   }, [items, recordThreadVisit]);
+  const unreadCount = items.filter((item) => !item.read).length;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- draws the inbox's unread count onto the Windows taskbar over IPC
+  useEffect(() => {
+    if (ready) setInboxBadge(unreadCount);
+  }, [ready, unreadCount]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the route change is the thread open that clears its mark-unread memory
   useEffect(() => {
     // Opening a thread reads it, including a mark-unread left from before.

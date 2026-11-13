@@ -682,7 +682,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "notification-inbox",
     title: "Notification inbox",
     to: "/settings/general",
-    searchTerms: ["bell sidebar notifications unread mark read macos"],
+    searchTerms: ["bell sidebar notifications unread mark read macos windows taskbar dock"],
     desktopOnly: true,
   },
   {
