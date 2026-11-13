@@ -66,6 +66,40 @@ it.effect("leaves the macOS Dock badge to the durable notification inbox", () =>
   }),
 );
 
+it.effect("keeps the Windows taskbar count while the app has focus", () =>
+  Effect.gen(function* () {
+    const handlers = new Map<string, DesktopIpc.DesktopIpcHandleListener>();
+    native.getFocusedWindow.mockReturnValue(native);
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* installNotificationBadge();
+        const handler = handlers.get("desktop:set-notification-badge")!;
+        yield* Effect.promise(() => Promise.resolve(handler({ sender: { id: 1 } }, badge)));
+        expect(native.setOverlayIcon).toHaveBeenLastCalledWith(
+          native.image,
+          "2 unread notifications",
+        );
+        expect(native.listeners.has("browser-window-focus")).toBe(false);
+      }),
+    ).pipe(
+      Effect.provideService(HostProcess.Platform, "win32"),
+      Effect.provide([
+        ElectronApp.layer,
+        DesktopIpc.layerTest({
+          handle: (channel, handler) => {
+            handlers.set(channel, handler);
+          },
+          removeHandler: (channel) => {
+            handlers.delete(channel);
+          },
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
+        }),
+      ]),
+    );
+  }),
+);
+
 it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
   Effect.gen(function* () {
     const handlers = new Map<string, DesktopIpc.DesktopIpcHandleListener>();

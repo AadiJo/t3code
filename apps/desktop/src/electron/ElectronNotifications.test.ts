@@ -30,7 +30,9 @@ const runtime = vi.hoisted(() => ({
   remove: vi.fn(),
   show: vi.fn(),
   sent: vi.fn(),
-  created: [] as Array<{ id: string; silent?: boolean }>,
+  close: vi.fn(),
+  activate: null as ((details: { arguments: string }) => void) | null,
+  created: [] as Array<{ id: string; silent?: boolean; toastXml?: string }>,
 }));
 vi.mock("electron", () => ({
   app: { setBadgeCount: runtime.badge },
@@ -43,8 +45,11 @@ vi.mock("electron", () => ({
       return Promise.resolve([]);
     }
     static remove = runtime.remove;
+    static handleActivation(callback: (details: { arguments: string }) => void) {
+      runtime.activate = callback;
+    }
     id: string;
-    constructor(options: { id: string; silent?: boolean }) {
+    constructor(options: { id: string; silent?: boolean; toastXml?: string }) {
       this.id = options.id;
       runtime.created.push(options);
     }
@@ -54,6 +59,9 @@ vi.mock("electron", () => ({
     show() {
       runtime.show(this.id);
     }
+    close() {
+      runtime.close(this.id);
+    }
   },
 }));
 
@@ -61,9 +69,10 @@ const encodeState = Schema.encodeSync(Schema.fromJsonString(NotificationState));
 const decodeState = Schema.decodeUnknownSync(Schema.fromJsonString(NotificationState));
 const decodeItems = Schema.decodeUnknownSync(Schema.Array(DesktopNotificationSchema));
 
-function harness() {
+function harness(platform: NodeJS.Platform = "darwin") {
   runtime.focused = false;
   runtime.created = [];
+  runtime.activate = null;
   vi.clearAllMocks();
   const files = new Map<string, string>();
   const methods = new Map<
@@ -71,7 +80,10 @@ function harness() {
     (value: unknown, event: DesktopIpcInvokeEvent) => Effect.Effect<unknown>
   >();
   const main = {
-    webContents: { id: 7, isDestroyed: () => false, send: runtime.sent },
+    webContents: { id: 7, isDestroyed: () => false, isLoading: () => false, send: runtime.sent },
+    isMinimized: () => false,
+    show: () => {},
+    focus: () => {},
   } as unknown as Electron.BrowserWindow;
   const fs = FileSystem.makeNoop({
     readFileString: (file) =>
@@ -90,7 +102,7 @@ function harness() {
   const install = installElectronNotifications().pipe(
     Effect.provideService(FileSystem.FileSystem, fs),
     Effect.provide(Path.layer),
-    Effect.provideService(HostProcess.Platform, "darwin"),
+    Effect.provideService(HostProcess.Platform, platform),
     Effect.provideService(DesktopEnvironment, {
       clientSettingsPath: "/test/client-settings.json",
     } as DesktopEnvironment["Service"]),
@@ -226,6 +238,30 @@ describe("native desktop notification delivery", () => {
       );
       expect(runtime.badge).toHaveBeenLastCalledWith(1);
       expect(yield* h.invoke(Channels.GET_NOTIFICATIONS_CHANNEL, undefined, 99)).toEqual([]);
+    }),
+  );
+  it.effect("uses Windows toasts that open and close through the inbox", () =>
+    Effect.gen(function* () {
+      const h = harness("win32");
+      yield* h.install();
+      yield* h.sync({ threadTitle: 'Fix <b> & "quotes"' });
+      yield* h.sync({ threadTitle: 'Fix <b> & "quotes"', input: true });
+      const [item] = decodeItems(yield* h.invoke(Channels.GET_NOTIFICATIONS_CHANNEL));
+      expect(runtime.created[0]?.toastXml).toContain(`launch="${item!.id}"`);
+      expect(runtime.created[0]?.toastXml).toContain("Fix &lt;b&gt; &amp; &quot;quotes&quot;");
+      // The renderer draws the Windows taskbar count; the Dock API is macOS only.
+      expect(runtime.badge).not.toHaveBeenCalled();
+      expect(runtime.remove).not.toHaveBeenCalled();
+
+      runtime.activate!({ arguments: item!.id });
+      // The open holds the inbox lock, so this read waits for it to finish.
+      const [read] = decodeItems(yield* h.invoke(Channels.GET_NOTIFICATIONS_CHANNEL));
+      expect(read?.read).toBe(true);
+      expect(runtime.close).toHaveBeenCalledOnce();
+      expect(runtime.sent).toHaveBeenCalledWith(
+        Channels.NOTIFICATION_OPEN_CHANNEL,
+        expect.objectContaining({ id: item!.id }),
+      );
     }),
   );
 });

@@ -195,7 +195,7 @@ export function startThreadNotifications(
       openToasts.set(toastKey, [...(openToasts.get(toastKey) ?? []), toastId]);
       return;
     }
-    // The macOS desktop app shows its own native notifications.
+    // The desktop inbox (macOS, Windows) shows its own native notifications.
     if (
       notificationBridge() ||
       !hasDesktopNotifications(mode) ||

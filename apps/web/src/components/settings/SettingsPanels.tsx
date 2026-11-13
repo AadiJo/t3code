@@ -45,6 +45,7 @@ import {
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { isElectron } from "../../env";
+import { notificationBridge } from "../../desktopNotifications";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
 import {
   readAppearanceModePreference,
@@ -785,10 +786,10 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-        {isElectron ? (
+        {notificationBridge() ? (
           <SettingsRow
             {...searchableSetting("notification-inbox")}
-            description="Show the notification bell in the sidebar footer on macOS. Notifications are still recorded and dismissed without it."
+            description="Show the notification bell in the sidebar footer. Notifications are still recorded and dismissed without it."
             control={
               <Switch
                 checked={settings.notificationInboxEnabled}

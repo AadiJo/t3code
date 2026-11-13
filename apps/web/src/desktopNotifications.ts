@@ -13,9 +13,11 @@ export const useDesktopNotifications = create<{
   ready: boolean;
 }>(() => ({ items: [], ready: false }));
 
+/** The desktop notification inbox, on the platforms where the app runs one (macOS, Windows). */
 export function notificationBridge() {
   const bridge = typeof window === "undefined" ? undefined : window.desktopBridge;
-  return bridge?.getClientPlatform?.() === "darwin" && bridge.syncNotifications
+  const platform = bridge?.getClientPlatform?.();
+  return (platform === "darwin" || platform === "win32") && bridge?.syncNotifications
     ? bridge
     : undefined;
 }
