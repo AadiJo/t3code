@@ -98,6 +98,12 @@ jobs:
         shell: bash
         run: cp .env.example .env
 
+      # The release guard caps loose files for NSIS install speed; this local-bundle build ships
+      # a few more than the release pipeline's prebuilt bundle. The file list below shows them.
+      - name: Relax the Windows payload file cap
+        shell: bash
+        run: sed -i 's/WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 80;/WINDOWS_PACKAGED_PAYLOAD_FILE_LIMIT = 200;/' scripts/build-desktop-artifact.ts
+
       - name: Build installer
         shell: bash
         env:
@@ -106,7 +112,16 @@ jobs:
           T3CODE_DESKTOP_OUTPUT_DIR: release
         run: node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64 --verbose
 
+      - name: List packaged files
+        if: always()
+        shell: bash
+        run: |
+          cd release/win-unpacked 2>/dev/null || exit 0
+          find . -type f | sort
+          find . -type f | wc -l
+
       - name: Upload installer
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: t3code-win-x64
