@@ -1,4 +1,8 @@
-import { type ConfirmDialogOptions, type ContextMenuItem } from "@t3tools/contracts";
+import {
+  type ConfirmDialogOptions,
+  type ContextMenuItem,
+  type DesktopBridge,
+} from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const showContextMenuFallbackMock =
@@ -70,5 +74,18 @@ describe("LocalApi", () => {
     const { createLocalApi } = await import("./localApi");
 
     await expect(createLocalApi().dialogs.confirm("Delete this thread?")).resolves.toBe(false);
+  });
+
+  it("shows app menus in the DOM on desktop too, never the native menu", async () => {
+    const showContextMenu = vi.fn().mockResolvedValue("delete");
+    showContextMenuFallbackMock.mockResolvedValue("delete");
+    testWindow().desktopBridge = { showContextMenu } as unknown as DesktopBridge;
+
+    const { createLocalApi } = await import("./localApi");
+    const items = [{ id: "delete", label: "Delete" }] as const;
+
+    await expect(createLocalApi().contextMenu.show(items)).resolves.toBe("delete");
+    expect(showContextMenuFallbackMock).toHaveBeenCalledWith(items, undefined);
+    expect(showContextMenu).not.toHaveBeenCalled();
   });
 });

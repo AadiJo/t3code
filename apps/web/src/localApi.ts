@@ -40,20 +40,17 @@ export function createLocalApi(): LocalApi {
       },
     },
     contextMenu: {
+      // App menus render in the DOM on every surface, so desktop matches the
+      // web styling (icons, headers, destructive tone) instead of the OS menu.
+      // Text editing menus (cut/copy/paste, spelling) stay native on desktop,
+      // as they are in a browser.
       show: async <T extends string>(
         items: readonly ContextMenuItem<T>[],
         position?: { x: number; y: number },
-      ): Promise<T | null> => {
-        if (window.desktopBridge) {
-          return window.desktopBridge.showContextMenu(items, position) as Promise<T | null>;
-        }
-        return showContextMenuFallback(items, position);
-      },
-      // Unlike native menus, the DOM fallback needs dismissal when underlying state disappears.
+      ): Promise<T | null> => showContextMenuFallback(items, position),
+      // Dismiss explicitly when the state behind an open menu goes away.
       close: async () => {
-        if (!window.desktopBridge) {
-          dismissContextMenu();
-        }
+        dismissContextMenu();
       },
     },
     persistence: {
