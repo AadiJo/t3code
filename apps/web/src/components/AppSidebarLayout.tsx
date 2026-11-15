@@ -392,6 +392,8 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
                   isSidebarVisible && stageBackdropVariant && "relative top-auto translate-y-0",
                 )}
                 aria-label="Toggle main sidebar"
+                // Over stage artwork it keeps the media look instead of the titlebar color.
+                data-titlebar-toggle={isSidebarVisible && stageBackdropVariant ? undefined : ""}
               />
             }
           />
