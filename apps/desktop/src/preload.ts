@@ -47,11 +47,13 @@ try {
 const clientPlatform = process.platform;
 
 if (clientPlatform === "darwin") {
-  // Native buttons ignore Chromium zoom; reserve native points even after reload.
+  // Native window buttons end at 70 points and ignore Chromium zoom. Add the right-side
+  // controls' 0.75rem gap, so the sidebar toggle sits as far from them as the right toggle
+  // sits from the window edge.
   const syncWindowControlInset = () => {
     document.documentElement.style.setProperty(
       "--desktop-window-controls-inset",
-      `${90 / webFrame.getZoomFactor()}px`,
+      `calc(${70 / webFrame.getZoomFactor()}px + 0.75rem)`,
     );
   };
   window.addEventListener("DOMContentLoaded", syncWindowControlInset, { once: true });

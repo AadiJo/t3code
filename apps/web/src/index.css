@@ -1480,7 +1480,7 @@ html[data-theme-id] [data-chat-header] [data-toolbar-control] {
   color: var(--contrast-toolbar-control-foreground);
 }
 
-/* Titlebar panel toggles share one icon color, themed or not, and stay ghost.
+/* Titlebar panel toggles share the muted icon gray, themed or not, and stay ghost.
    A tooltip trigger that renders the control takes its data-slot, so match
    both; the sidebar toggle opts in with data-titlebar-toggle. The
    html[data-theme-id] copies keep the specificity themed pages had. */
@@ -1491,8 +1491,8 @@ html[data-theme-id]
   :is([data-panel-layout-controls], [data-workspace-titlebar-controls])
   :is([data-slot="toggle"], [data-slot="button"], [data-slot="tooltip-trigger"]),
 html[data-theme-id] [data-titlebar-toggle] {
-  --control-icon-color: var(--contrast-toolbar-foreground);
-  color: var(--contrast-toolbar-foreground);
+  --control-icon-color: var(--contrast-muted-foreground);
+  color: var(--contrast-muted-foreground);
 }
 
 /* Toggle dims its icon to 80%; titlebar buttons draw theirs at full strength. */
@@ -1507,10 +1507,10 @@ html[data-theme-id]
   :is([data-slot="toggle"], [data-slot="button"], [data-slot="tooltip-trigger"]):disabled {
   --control-icon-color: color-mix(
     in oklab,
-    var(--contrast-toolbar-foreground) 55%,
+    var(--contrast-muted-foreground) 55%,
     var(--toolbar-background)
   );
-  color: color-mix(in oklab, var(--contrast-toolbar-foreground) 55%, var(--toolbar-background));
+  color: color-mix(in oklab, var(--contrast-muted-foreground) 55%, var(--toolbar-background));
 }
 
 html[data-theme-id] [data-chat-header] [data-slot="button"]:hover,
