@@ -142,6 +142,7 @@ function setup(options: { readonly focused?: boolean } = {}) {
   const router = {
     state: { matches: [{ params: { environmentId: "env-1", threadId: "other-thread" } }] },
     navigate: vi.fn(),
+    subscribe: () => () => {},
   } as unknown as AnyRouter;
   return {
     start: () => {
