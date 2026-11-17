@@ -1,4 +1,11 @@
-import { memo, type MouseEventHandler, type PointerEventHandler, type ReactNode } from "react";
+import {
+  memo,
+  useEffect,
+  useState,
+  type MouseEventHandler,
+  type PointerEventHandler,
+  type ReactNode,
+} from "react";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -38,6 +45,7 @@ interface ComposerPrimaryActionsProps {
   pendingAction: PendingActionState | null;
   isRunning: boolean;
   canInterrupt: boolean;
+  runId?: string | null;
   followUpBehavior?: "queue" | "steer";
   canSteer?: boolean;
   alternateShortcutLabel?: string | null;
@@ -56,17 +64,22 @@ interface ComposerPrimaryActionsProps {
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
   compactBeforeSendTokens?: number | null;
+  hideCompactToggle?: boolean;
   keepFullHistory?: boolean;
   onToggleKeepFullHistory?: () => void;
 }
 
 const formatPendingPrimaryActionLabel = (input: {
+  compact: boolean;
   isLastQuestion: boolean;
   isResponding: boolean;
   questionIndex: number;
 }) => {
   if (input.isResponding) {
-    return "Submitting";
+    return "Submitting...";
+  }
+  if (input.compact) {
+    return input.isLastQuestion ? "Submit" : "Next";
   }
   if (!input.isLastQuestion) {
     return "Next question";
@@ -74,9 +87,129 @@ const formatPendingPrimaryActionLabel = (input: {
   return input.questionIndex > 0 ? "Submit answers" : "Submit answer";
 };
 
+const STOP_PENDING_MAX_MS = 10_000;
+// The action that takes Stop's place ignores clicks this long, so repeat Stop clicks can't resume.
+const STOP_LANDED_CLICK_GUARD_MS = 500;
+
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
   event.preventDefault();
 };
+
+type StopPhase = "pending" | "timedOut" | "landed" | null;
+
+function useStopPhase(input: {
+  runId: string | null;
+  canInterrupt: boolean;
+  canOperateThread: boolean;
+}) {
+  const { runId, canInterrupt, canOperateThread } = input;
+  const [stopPhase, setStopPhase] = useState<StopPhase>(null);
+  const [stopRunId, setStopRunId] = useState(runId);
+  if (runId !== null && stopRunId !== runId) {
+    setStopRunId(runId);
+    setStopPhase(null);
+  } else if (canOperateThread) {
+    // Losing permission also clears canInterrupt; it does not acknowledge the stop.
+    if ((stopPhase === "pending" || stopPhase === "timedOut") && !canInterrupt)
+      setStopPhase("landed");
+    else if (stopPhase === "landed" && canInterrupt) setStopPhase(null);
+  }
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- timers that re-enable an unsettled Stop and end the landed click guard
+  useEffect(() => {
+    if (stopPhase === "pending") {
+      const timeout = setTimeout(() => setStopPhase("timedOut"), STOP_PENDING_MAX_MS);
+      return () => clearTimeout(timeout);
+    }
+    if (stopPhase === "landed") {
+      const timeout = setTimeout(() => setStopPhase(null), STOP_LANDED_CLICK_GUARD_MS);
+      return () => clearTimeout(timeout);
+    }
+  }, [stopPhase]);
+  return [stopPhase, setStopPhase] as const;
+}
+
+function StopGenerationButton({
+  stopPhase,
+  canOperateThread,
+  preserveComposerFocusOnPointerDown,
+  onStopRequested,
+  onInterrupt,
+}: {
+  stopPhase: StopPhase;
+  canOperateThread: boolean;
+  preserveComposerFocusOnPointerDown: boolean;
+  onStopRequested: () => void;
+  onInterrupt: () => void;
+}) {
+  const isStopDisabled = stopPhase === "pending";
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground/70 transition-[background-color,color,scale] duration-150 ease-out hover:bg-sidebar-row-hover hover:text-foreground active:scale-[0.97] active:bg-accent disabled:cursor-default disabled:opacity-64 disabled:hover:bg-transparent sm:size-7 [&_svg]:pointer-events-none"
+            onPointerDown={preserveComposerFocusOnPointerDown ? preventPointerFocus : undefined}
+            disabled={!canOperateThread || isStopDisabled}
+            onClick={() => {
+              if (!canOperateThread || isStopDisabled) return;
+              onStopRequested();
+              onInterrupt();
+            }}
+            aria-label={stopPhase === "pending" ? "Stopping" : "Stop generation"}
+          />
+        }
+      >
+        {/* Straight edges read thinner than the send arrow's diagonals at the same stroke. */}
+        <SquareIcon className="size-3.5" strokeWidth={2.2} aria-hidden="true" />
+      </TooltipTrigger>
+      <TooltipPopup>{stopPhase === "pending" ? "Stopping…" : "Interrupt"}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+/** The collapsed mobile composer's Stop, shown in place of `children` while a turn can be stopped. */
+export function CollapsedComposerStopAction({
+  children,
+  canOperateThread,
+  canInterrupt,
+  runId,
+  hasSendableContent,
+  isEditingQueuedMessage,
+  onInterrupt,
+}: {
+  children: ReactNode;
+  canOperateThread: boolean;
+  canInterrupt: boolean;
+  runId: string | null;
+  hasSendableContent: boolean;
+  isEditingQueuedMessage: boolean;
+  onInterrupt: () => void;
+}) {
+  const [stopPhase, setStopPhase] = useStopPhase({ runId, canInterrupt, canOperateThread });
+  if (
+    !(canInterrupt || stopPhase === "pending" || stopPhase === "timedOut") ||
+    hasSendableContent ||
+    isEditingQueuedMessage
+  ) {
+    return children;
+  }
+  return (
+    <span
+      data-chat-composer-transition-actions="true"
+      data-chat-composer-collapsed-controls="true"
+      className="flex shrink-0"
+    >
+      <StopGenerationButton
+        stopPhase={stopPhase}
+        canOperateThread={canOperateThread}
+        preserveComposerFocusOnPointerDown
+        onStopRequested={() => setStopPhase("pending")}
+        onInterrupt={onInterrupt}
+      />
+    </span>
+  );
+}
 
 export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   children,
@@ -85,6 +218,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   pendingAction,
   isRunning,
   canInterrupt,
+  runId = null,
   followUpBehavior = "steer",
   canSteer = true,
   alternateShortcutLabel = null,
@@ -102,9 +236,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   onPreviousPendingQuestion,
   onInterrupt,
   compactBeforeSendTokens = null,
+  hideCompactToggle = false,
   keepFullHistory = false,
   onToggleKeepFullHistory,
 }: ComposerPrimaryActionsProps) {
+  const [stopPhase, setStopPhase] = useStopPhase({ runId, canInterrupt, canOperateThread });
   const pointerFocusProps = preserveComposerFocusOnPointerDown
     ? { onPointerDown: preventPointerFocus }
     : undefined;
@@ -123,32 +259,27 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const stageBackdropVariant = useSidebarStageBackdropVariant(environmentIdentificationMode);
 
   const renderStopGenerationButton = () => (
-    <Tooltip key="interrupt">
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="flex size-8 cursor-pointer items-center justify-center rounded-md bg-transparent text-muted-foreground/70 transition-[background-color,color,scale] duration-150 ease-out hover:bg-sidebar-row-hover active:scale-[0.97] active:bg-accent sm:size-7 [&_svg]:pointer-events-none"
-            {...pointerFocusProps}
-            disabled={!canOperateThread}
-            onClick={() => {
-              if (canOperateThread) onInterrupt();
-            }}
-            aria-label="Stop generation"
-          />
-        }
-      >
-        {/* Straight edges read thinner than the send arrow's diagonals at the same stroke. */}
-        <SquareIcon className="size-3.5" strokeWidth={2.2} aria-hidden="true" />
-      </TooltipTrigger>
-      <TooltipPopup>Interrupt</TooltipPopup>
-    </Tooltip>
+    <StopGenerationButton
+      key="interrupt"
+      stopPhase={stopPhase}
+      canOperateThread={canOperateThread}
+      preserveComposerFocusOnPointerDown={preserveComposerFocusOnPointerDown}
+      onStopRequested={() => setStopPhase("pending")}
+      onInterrupt={onInterrupt}
+    />
+  );
+
+  // Keep the clicked target at the right edge even if typing changes the primary action.
+  const withStopButton = (action: ReactNode) => (
+    <>
+      {action}
+      {stopPhase === "pending" || stopPhase === "timedOut" ? renderStopGenerationButton() : null}
+    </>
   );
 
   if (pendingAction) {
     return (
       <div className={cn("flex items-center justify-end", compact ? "gap-1.5" : "gap-2")}>
-        {canInterrupt ? renderStopGenerationButton() : null}
         {pendingAction.questionIndex > 0 ? (
           <button
             type="button"
@@ -166,6 +297,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           type="submit"
           className={composerIconActionClassName(false)}
           {...pointerFocusProps}
+          onClick={(event) => {
+            if (stopPhase === "landed") event.preventDefault();
+          }}
           disabled={
             !canOperateThread ||
             isEnvironmentUnavailable ||
@@ -177,6 +311,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
                 : !pendingAction.canAdvance))
           }
           aria-label={formatPendingPrimaryActionLabel({
+            compact,
             isLastQuestion: pendingAction.isLastQuestion,
             isResponding: pendingAction.isResponding,
             questionIndex: pendingAction.questionIndex,
@@ -188,11 +323,18 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             <CornerDownLeftIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
           )}
         </button>
+        {canInterrupt || stopPhase === "pending" || stopPhase === "timedOut"
+          ? renderStopGenerationButton()
+          : null}
       </div>
     );
   }
 
-  if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
+  if (
+    (canInterrupt || stopPhase === "pending" || stopPhase === "timedOut") &&
+    !hasSendableContent &&
+    !isEditingQueuedMessage
+  ) {
     return (
       <>
         {children}
@@ -243,7 +385,14 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       type={showResume ? "button" : "submit"}
       className={composerIconActionClassName(stageBackdropVariant !== null)}
       {...pointerFocusProps}
-      onClick={showResume ? onResume : onSubmitMessage}
+      onClick={(event) => {
+        if (stopPhase === "landed") {
+          event.preventDefault();
+          return;
+        }
+        if (showResume) onResume?.();
+        else onSubmitMessage?.(event);
+      }}
       disabled={
         isSendBusy ||
         isSendDisabled ||
@@ -279,16 +428,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       <TooltipPopup>{submitTooltip}</TooltipPopup>
     </Tooltip>
   );
-  if (compactTokens === null) {
-    return (
+  if (compactTokens === null || hideCompactToggle) {
+    return withStopButton(
       <>
         {children}
         {submit}
-      </>
+      </>,
     );
   }
 
-  return (
+  return withStopButton(
     <div data-chat-composer-compact-send="true" className="flex items-center gap-2">
       <Tooltip>
         <TooltipTrigger
@@ -321,6 +470,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       </Tooltip>
       {children}
       {submit}
-    </div>
+    </div>,
   );
 });
