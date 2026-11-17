@@ -1481,30 +1481,52 @@ html[data-theme-id] [data-chat-header] [data-toolbar-control] {
 }
 
 /* Titlebar panel toggles share the muted icon gray, themed or not, and stay ghost.
-   A tooltip trigger that renders the control takes its data-slot, so match
-   both; the sidebar toggle opts in with data-titlebar-toggle. The
+   A tooltip or popover trigger that renders the control takes its data-slot,
+   so match those too; the sidebar toggle opts in with data-titlebar-toggle. The
    html[data-theme-id] copies keep the specificity themed pages had. */
 :is([data-panel-layout-controls], [data-workspace-titlebar-controls])
-  :is([data-slot="toggle"], [data-slot="button"], [data-slot="tooltip-trigger"]),
+  :is(
+    [data-slot="toggle"],
+    [data-slot="button"],
+    [data-slot="tooltip-trigger"],
+    [data-slot="popover-trigger"]
+  ),
 [data-titlebar-toggle],
 html[data-theme-id]
   :is([data-panel-layout-controls], [data-workspace-titlebar-controls])
-  :is([data-slot="toggle"], [data-slot="button"], [data-slot="tooltip-trigger"]),
+  :is(
+    [data-slot="toggle"],
+    [data-slot="button"],
+    [data-slot="tooltip-trigger"],
+    [data-slot="popover-trigger"]
+  ),
 html[data-theme-id] [data-titlebar-toggle] {
   --control-icon-color: var(--contrast-muted-foreground);
   color: var(--contrast-muted-foreground);
 }
 
 /* Toggle dims its icon to 80%; titlebar buttons draw theirs at full strength. */
-:is([data-panel-layout-controls], [data-workspace-titlebar-controls]) [data-slot="toggle"] svg {
+:is([data-panel-layout-controls], [data-workspace-titlebar-controls])
+  :is([data-slot="toggle"], [data-slot="popover-trigger"])
+  svg {
   opacity: 1;
 }
 
 :is([data-panel-layout-controls], [data-workspace-titlebar-controls])
-  :is([data-slot="toggle"], [data-slot="button"], [data-slot="tooltip-trigger"]):disabled,
+  :is(
+    [data-slot="toggle"],
+    [data-slot="button"],
+    [data-slot="tooltip-trigger"],
+    [data-slot="popover-trigger"]
+  ):disabled,
 html[data-theme-id]
   :is([data-panel-layout-controls], [data-workspace-titlebar-controls])
-  :is([data-slot="toggle"], [data-slot="button"], [data-slot="tooltip-trigger"]):disabled {
+  :is(
+    [data-slot="toggle"],
+    [data-slot="button"],
+    [data-slot="tooltip-trigger"],
+    [data-slot="popover-trigger"]
+  ):disabled {
   --control-icon-color: color-mix(
     in oklab,
     var(--contrast-muted-foreground) 55%,
