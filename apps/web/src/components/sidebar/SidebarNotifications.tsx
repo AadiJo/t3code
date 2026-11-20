@@ -6,8 +6,9 @@ import {
   ShieldAlertIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { T, useGT } from "gt-react";
 import { useNavigate } from "@tanstack/react-router";
-import { desktopNotificationTitles, type DesktopNotification } from "@t3tools/contracts";
+import type { DesktopNotification, DesktopNotificationKind } from "@t3tools/contracts";
 import { useClientSettings } from "../../hooks/useSettings";
 import {
   notificationBridge,
@@ -38,11 +39,18 @@ export function SidebarNotifications() {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const navigate = useNavigate();
+  const gt = useGT();
   if (!enabled || !notificationBridge()) return null;
+  const kindTitles: Record<DesktopNotificationKind, string> = {
+    approval: gt("Approval required"),
+    input: gt("Input required"),
+    failed: gt("Turn failed"),
+    completed: gt("Turn completed"),
+  };
   const unread = items.filter((item) => !item.read);
   const visible = showAll ? items : unread;
   const report = () =>
-    toastManager.add({ type: "error", title: "Could not mark notification as read" });
+    toastManager.add({ type: "error", title: gt("Could not mark notification as read") });
   const openThread = (item: DesktopNotification) => {
     setOpen(false);
     void navigate({
@@ -62,7 +70,9 @@ export function SidebarNotifications() {
                   <SidebarMenuButton
                     size="icon"
                     className="relative"
-                    aria-label={unread.length ? "Notifications, unread items" : "Notifications"}
+                    aria-label={
+                      unread.length ? gt("Notifications, unread items") : gt("Notifications")
+                    }
                   />
                 }
               />
@@ -76,11 +86,11 @@ export function SidebarNotifications() {
               />
             )}
           </TooltipTrigger>
-          <TooltipPopup side="top">Notifications</TooltipPopup>
+          <TooltipPopup side="top">{gt("Notifications")}</TooltipPopup>
         </Tooltip>
         <PopoverPopup side="top" align="start" sideOffset={10} width="lg">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <PopoverTitle>Notifications</PopoverTitle>
+            <PopoverTitle>{gt("Notifications")}</PopoverTitle>
             <button
               type="button"
               disabled={unread.length === 0}
@@ -92,7 +102,7 @@ export function SidebarNotifications() {
                 }).catch(report);
               }}
             >
-              Mark all read
+              <T>Mark all read</T>
             </button>
           </div>
           <div className="flex gap-4 border-b border-border pb-2 text-xs">
@@ -102,7 +112,9 @@ export function SidebarNotifications() {
               className={!showAll ? "text-popover-foreground" : "text-muted-foreground"}
               onClick={() => setShowAll(false)}
             >
-              Unread{unread.length ? ` (${unread.length})` : ""}
+              {unread.length
+                ? gt("Unread ({count})", { count: unread.length })
+                : gt("Unread", { $context: "filter showing unread notifications" })}
             </button>
             <button
               type="button"
@@ -110,13 +122,13 @@ export function SidebarNotifications() {
               className={showAll ? "text-popover-foreground" : "text-muted-foreground"}
               onClick={() => setShowAll(true)}
             >
-              All
+              {gt("All", { $context: "filter showing every notification" })}
             </button>
           </div>
           <div className="max-h-96 overflow-y-auto">
             {visible.length === 0 && (
               <p className="py-6 text-center text-xs text-muted-foreground">
-                {showAll ? "No notifications" : "No unread notifications"}
+                {showAll ? gt("No notifications") : gt("No unread notifications")}
               </p>
             )}
             {visible.map((item) => {
@@ -138,8 +150,9 @@ export function SidebarNotifications() {
                     <span className="min-w-0">
                       <span className="block truncate text-xs font-medium">{item.threadTitle}</span>
                       <span className="block text-xs text-muted-foreground">
-                        {desktopNotificationTitles[item.kind]}
-                        {item.resolved ? " · Resolved" : ""}
+                        {item.resolved
+                          ? gt("{title} · Resolved", { title: kindTitles[item.kind] })
+                          : kindTitles[item.kind]}
                       </span>
                       <span className="block truncate text-2xs text-muted-foreground">
                         {item.projectTitle} · {item.environmentTitle}
@@ -152,7 +165,7 @@ export function SidebarNotifications() {
                         render={
                           <button
                             type="button"
-                            aria-label={`Mark ${item.threadTitle} as read`}
+                            aria-label={gt("Mark {thread} as read", { thread: item.threadTitle })}
                             className="shrink-0 p-1 text-muted-foreground hover:text-popover-foreground"
                             onClick={() => {
                               void updateDesktopNotifications({
@@ -165,7 +178,7 @@ export function SidebarNotifications() {
                       >
                         <CheckIcon className="size-3.5" />
                       </TooltipTrigger>
-                      <TooltipPopup>Mark as read</TooltipPopup>
+                      <TooltipPopup>{gt("Mark as read")}</TooltipPopup>
                     </Tooltip>
                   )}
                 </div>

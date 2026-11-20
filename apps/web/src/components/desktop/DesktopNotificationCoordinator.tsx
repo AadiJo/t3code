@@ -9,6 +9,8 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { msg } from "gt-react";
+import { m } from "~/i18n/messages";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   deriveAcknowledgedCompletions,
@@ -59,7 +61,7 @@ function EnvironmentNotifications({
             environmentId,
             threadId: thread.id,
             threadTitle: thread.title,
-            projectTitle: projects.get(thread.projectId) ?? "Project",
+            projectTitle: projects.get(thread.projectId) ?? m(msg("Project")),
             environmentTitle: label,
             turnId: thread.latestRun?.runId ?? null,
             turnState,
