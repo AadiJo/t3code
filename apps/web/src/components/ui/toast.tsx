@@ -19,7 +19,7 @@ import {
   XIcon,
   CheckIcon,
   ChevronDownIcon,
-  ChevronUpIcon,
+  ChevronRightIcon,
   CopyIcon,
 } from "lucide-react";
 
@@ -198,9 +198,9 @@ function ToastExpandableSection({
         type="button"
       >
         {open ? (
-          <ChevronUpIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} />
-        ) : (
           <ChevronDownIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} />
+        ) : (
+          <ChevronRightIcon className="size-3.5 shrink-0 opacity-80" strokeWidth={2.25} />
         )}
         {open ? collapseLabel : expandLabel}
       </button>
@@ -283,13 +283,13 @@ function ToastDescriptionAndExpandable({
             />
           </div>
           {open ? (
-            <ChevronUpIcon
+            <ChevronDownIcon
               aria-hidden
               className="size-3.5 h-lh shrink-0 text-muted-foreground opacity-80"
               strokeWidth={2.25}
             />
           ) : (
-            <ChevronDownIcon
+            <ChevronRightIcon
               aria-hidden
               className="size-3.5 h-lh shrink-0 text-muted-foreground opacity-80"
               strokeWidth={2.25}

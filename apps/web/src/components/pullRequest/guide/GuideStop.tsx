@@ -102,7 +102,7 @@ export function GuideStop({
                   Stop <Var>{index + 1}</Var> of <Var>{stopCount}</Var>
                 </T>
               </span>
-              <ChevronDownIcon aria-hidden className={cn(railOpen && "rotate-180")} />
+              <ChevronDownIcon aria-hidden className={cn(!railOpen && "-rotate-90")} />
             </CollapsibleTrigger>
             <div className="flex items-center gap-1">
               <Button

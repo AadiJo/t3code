@@ -83,6 +83,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useEnvironmentQuery } from "../../state/query";
 import { AgentElapsed } from "./AgentElapsed";
 import { ThreadRelationshipIcon, threadRelationshipStatusLabel } from "./ThreadRelationshipIcon";
+import { subagentIconModel } from "./providerIconUtils";
 import { ThreadLineageWorkflowRow } from "./ThreadLineageWorkflowRow";
 import { resolveThreadOpenRoute } from "../../lib/sideChatPane";
 
@@ -325,6 +326,7 @@ function RemoteSubagentRow(props: {
             // The task's own driver here is only a "remote" label.
             driver={props.provider?.driver}
             provider={props.provider}
+            model={subagentIconModel(props.agent)}
             anyInstanceBadge={props.anyInstanceBadge}
             fallbackIcon={BotIcon}
             status={status}
@@ -864,6 +866,7 @@ export function ThreadRelationshipsPanel(props: {
         <ThreadRelationshipIcon
           driver={isSubagent && !isParent ? providerDriver : undefined}
           provider={provider}
+          model={agent ? subagentIconModel(agent) : undefined}
           providerEntries={providerEntries}
           fallbackIcon={RelationshipIcon}
           status={rowStatus}

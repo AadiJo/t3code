@@ -450,7 +450,7 @@ function ConversationGroup({
               aria-hidden
               className={cn(
                 "size-3.5 shrink-0 text-muted-foreground transition-transform",
-                open && "rotate-180",
+                !open && "-rotate-90",
               )}
             />
           </CollapsibleTrigger>
@@ -567,7 +567,10 @@ function ReviewThreadEvent({
         )}
         <ChevronDownIcon
           aria-hidden
-          className={cn("ml-auto size-3.5 shrink-0 transition-transform", expanded && "rotate-180")}
+          className={cn(
+            "ml-auto size-3.5 shrink-0 transition-transform",
+            !expanded && "-rotate-90",
+          )}
         />
       </button>
       {expanded ? (

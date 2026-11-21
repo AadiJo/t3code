@@ -156,6 +156,7 @@ function WorkflowMemberRow(props: {
             providerInstanceId={props.providerInstanceId}
             driver={props.driver}
             status={member.status}
+            model={member.model ?? undefined}
           />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-medium text-foreground">

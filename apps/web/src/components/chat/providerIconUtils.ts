@@ -26,6 +26,14 @@ export function usesGeminiModelIcon(
   return driverKind === "cursor" && model?.startsWith(CURSOR_GEMINI_MODEL_PREFIX) === true;
 }
 
+/** The model a subagent's icon is chosen by: the one requested, else the one the provider reported. */
+export function subagentIconModel(agent: {
+  readonly model: string | null;
+  readonly modelSelection?: { readonly model: string } | undefined;
+}): string | undefined {
+  return agent.modelSelection?.model ?? agent.model ?? undefined;
+}
+
 export type ModelEsque = {
   slug: string;
   name: string;

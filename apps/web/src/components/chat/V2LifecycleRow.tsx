@@ -62,7 +62,7 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { formatShortTimestamp } from "../../timestampFormat";
-import { getTriggerDisplayModelName } from "./providerIconUtils";
+import { getTriggerDisplayModelName, subagentIconModel } from "./providerIconUtils";
 import { ProviderInstanceIcon, providerTextColor } from "./ProviderInstanceIcon";
 import { cn } from "~/lib/utils";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
@@ -239,6 +239,7 @@ function SubagentAvatar({
   displayName,
   iconUrl,
   accentColor,
+  model,
   showBadge,
   anyInstanceBadge,
   status,
@@ -246,6 +247,7 @@ function SubagentAvatar({
 }: {
   driver?: ProviderDriverKind | undefined;
   displayName?: string | undefined;
+  model?: string | undefined;
   iconUrl?: string | undefined;
   accentColor?: string | undefined;
   showBadge: boolean;
@@ -264,6 +266,7 @@ function SubagentAvatar({
       {driver ? (
         <ProviderInstanceIcon
           driverKind={driver}
+          {...(model ? { model } : {})}
           displayName={displayName ?? driver}
           accentColor={accentColor}
           acpRegistryIconUrl={iconUrl}
@@ -302,6 +305,7 @@ export function EnvironmentSubagentAvatar({
   /** A task in a linked environment runs a provider instance there; its driver here is only a label. */
   remote?: OrchestrationV2RemoteTaskChild | undefined;
   status?: OrchestrationV2TurnItem["status"] | undefined;
+  model?: string | undefined;
 }) {
   const providerEnvironmentId = remote?.environmentId ?? environmentId;
   const providersAtom = serverEnvironment.providersValueAtom(providerEnvironmentId);
@@ -489,6 +493,7 @@ function SubagentTimelineLink(props: {
         driver={props.driver}
         remote={remote}
         status={status ?? undefined}
+        model={agent ? subagentIconModel(agent) : undefined}
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">

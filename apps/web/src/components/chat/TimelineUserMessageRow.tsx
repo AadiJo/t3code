@@ -432,7 +432,7 @@ export function FoldedMessageHeader(props: {
       <ChevronDownIcon
         className={cn(
           "size-3.5 shrink-0 text-muted-foreground transition-transform",
-          props.expanded && "rotate-180",
+          !props.expanded && "-rotate-90",
         )}
       />
     </button>

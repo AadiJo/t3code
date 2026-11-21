@@ -12,6 +12,7 @@ import { AgentElapsed } from "./AgentElapsed";
 import { SubagentTooltipContent } from "./SubagentTooltipContent";
 import { ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { ThreadRelationshipIcon } from "./ThreadRelationshipIcon";
+import { subagentIconModel } from "./providerIconUtils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { cn } from "../../lib/utils";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
@@ -95,6 +96,7 @@ function WorkflowMemberRow({
           <ThreadRelationshipIcon
             driver={driver}
             provider={provider}
+            model={subagentIconModel(member)}
             providerEntries={providerEntries}
             status={member.status}
           />
@@ -205,7 +207,7 @@ export function ThreadLineageWorkflowRow({
             aria-hidden
             className={cn(
               "size-3.5 text-muted-foreground transition-transform",
-              expanded && "rotate-180",
+              !expanded && "-rotate-90",
             )}
           />
         </ThreadDetailsControl>

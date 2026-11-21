@@ -161,7 +161,7 @@ function TrackerRow({
           aria-label={gt("Toggle {tracker} details", { tracker: tracker.displayName })}
         >
           <ChevronDownIcon
-            className={cn("size-3.5 transition-transform", isExpanded && "rotate-180")}
+            className={cn("size-3.5 transition-transform", !isExpanded && "-rotate-90")}
           />
         </Button>
       </div>

@@ -328,7 +328,7 @@ function CollapsedComment({
               {label}
               <ChevronDownIcon
                 aria-hidden
-                className={cn("size-3.5 transition-transform", open && "rotate-180")}
+                className={cn("size-3.5 transition-transform", !open && "-rotate-90")}
               />
             </CollapsibleTrigger>
             {/* Collapsed, the status label already says "Resolved". */}
