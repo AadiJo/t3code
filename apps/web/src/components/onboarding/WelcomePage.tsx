@@ -690,7 +690,7 @@ function AgentsSection({
             {found.length > 0 ? gt("Add more agents") : gt("Set up an agent")}
           </span>
           {showMore ? null : <AgentLogoStack providers={available} acp={acpAllowed} />}
-          <ChevronDownIcon className="ml-auto size-4 text-muted-foreground group-data-panel-open:rotate-180" />
+          <ChevronRightIcon className="ml-auto size-4 text-muted-foreground transition-transform group-data-panel-open:rotate-90" />
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
@@ -910,7 +910,7 @@ function ProjectsSection({
               : gt("{count, plural, one {Review all {count}} other {Review all {count}}}", {
                   count: candidates.length,
                 })}
-            <ChevronDownIcon className={cn("size-3.5", reviewing && "rotate-180")} />
+            <ChevronDownIcon className={cn("size-3.5", !reviewing && "-rotate-90")} />
           </Button>
         ) : null}
       </div>
@@ -993,7 +993,7 @@ function PhoneSection({ environmentId }: { readonly environmentId: EnvironmentId
           </span>
           <CollapsibleTrigger render={<Button variant="ghost-muted" size="xs" />}>
             {open ? gt("Hide") : gt("Set up")}
-            <ChevronDownIcon className={cn("size-3.5", open && "rotate-180")} />
+            <ChevronDownIcon className={cn("size-3.5", !open && "-rotate-90")} />
           </CollapsibleTrigger>
         </div>
         <CollapsiblePanel>

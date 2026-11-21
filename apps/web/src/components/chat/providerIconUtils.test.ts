@@ -1,7 +1,12 @@
 import { ProviderDriverKind } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { usesGeminiModelIcon, usesGrokModelIcon, usesMetaModelIcon } from "./providerIconUtils";
+import {
+  subagentIconModel,
+  usesGeminiModelIcon,
+  usesGrokModelIcon,
+  usesMetaModelIcon,
+} from "./providerIconUtils";
 
 describe("usesMetaModelIcon", () => {
   const openCode = ProviderDriverKind.make("opencode");
@@ -46,5 +51,23 @@ describe("usesGeminiModelIcon", () => {
     expect(usesGeminiModelIcon(ProviderDriverKind.make("antigravity"), "gemini-3.1-pro")).toBe(
       false,
     );
+  });
+});
+
+describe("subagentIconModel", () => {
+  const cursor = ProviderDriverKind.make("cursor");
+
+  it.each([
+    ["the requested model over the reported one", "grok-4", "cursor-auto", "grok-4"],
+    ["the reported model when none was requested", undefined, "gemini-3-pro", "gemini-3-pro"],
+    ["no model when neither is known", undefined, null, undefined],
+  ])("picks %s", (_, requested, reported, expected) => {
+    const model = subagentIconModel({
+      model: reported,
+      ...(requested ? { modelSelection: { model: requested } } : {}),
+    });
+    expect(model).toBe(expected);
+    // The override then follows that model, as it does in the model picker.
+    expect(usesGrokModelIcon(cursor, model)).toBe(expected === "grok-4");
   });
 });

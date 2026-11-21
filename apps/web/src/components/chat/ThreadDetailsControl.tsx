@@ -16,7 +16,7 @@ import {
   THREAD_DETAILS_PANEL_SELECT_LABEL_CLASS,
   THREAD_DETAILS_PANEL_SELECT_ICON_CLASS,
 } from "./threadDetailsPanelStyles";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 
 const parts = {
   row: THREAD_DETAILS_PANEL_ROW_CLASS,
@@ -118,7 +118,7 @@ export function ThreadDetailsMoreButton({
   remaining: number;
   onToggle: () => void;
 }) {
-  const Icon = expanded ? ChevronUpIcon : ChevronDownIcon;
+  const Icon = expanded ? ChevronDownIcon : ChevronRightIcon;
   return (
     <ThreadDetailsControl
       variant="ghost"

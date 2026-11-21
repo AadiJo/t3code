@@ -55,6 +55,7 @@ export function threadRelationshipStatusLabel(
 export function ThreadRelationshipIcon({
   driver,
   provider,
+  model,
   providerEntries = [],
   anyInstanceBadge = hasInstanceBadge(providerEntries),
   status,
@@ -62,6 +63,7 @@ export function ThreadRelationshipIcon({
 }: {
   driver?: ProviderDriverKind | undefined;
   provider?: ServerProvider | undefined;
+  model?: string | undefined;
   providerEntries?: ReadonlyArray<ProviderInstanceEntry>;
   /** For rows that can't take `providerEntries` but sit in the same list as rows that do. */
   anyInstanceBadge?: boolean;
@@ -78,6 +80,7 @@ export function ThreadRelationshipIcon({
       {driver ? (
         <ProviderInstanceIcon
           driverKind={driver}
+          {...(model ? { model } : {})}
           displayName={entry?.displayName ?? provider?.displayName ?? driver}
           accentColor={entry?.accentColor}
           acpRegistryAgentId={entry?.acpRegistryAgentId}

@@ -15,7 +15,7 @@ import {
 import { isLoopbackHost } from "@t3tools/shared/preview";
 import { T, useGT, Var } from "gt-react";
 import { m } from "~/i18n/messages";
-import { CableIcon, GlobeIcon, SquareIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { CableIcon, GlobeIcon, SquareIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { type MouseEvent, useState } from "react";
 
 import {
@@ -335,9 +335,9 @@ function ThreadServersList(props: ThreadServersPanelProps) {
           className="w-full active:scale-100"
         >
           {hiddenCount > 0 ? (
-            <ChevronDownIcon aria-hidden className="size-4 shrink-0" />
+            <ChevronRightIcon aria-hidden className="size-4 shrink-0" />
           ) : (
-            <ChevronUpIcon aria-hidden className="size-4 shrink-0" />
+            <ChevronDownIcon aria-hidden className="size-4 shrink-0" />
           )}
           {hiddenCount > 0 ? (
             <T>

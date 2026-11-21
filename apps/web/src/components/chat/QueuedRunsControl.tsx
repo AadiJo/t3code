@@ -440,7 +440,7 @@ export function QueuedRunsControl({
               aria-hidden
               className={cn(
                 "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
-                showAll && "rotate-180",
+                !showAll && "-rotate-90",
               )}
             />
           </InlineButton>

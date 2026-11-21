@@ -12,6 +12,7 @@ import { ChevronDownIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
 import { EnvironmentSubagentAvatar, SubagentElapsed, V2LifecycleRow } from "./V2LifecycleRow";
+import { subagentIconModel } from "./providerIconUtils";
 import { LinkRequestCard } from "./LinkRequestCard";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { TimelineRowCtx, type TimelineRow } from "./timelineRowContext";
@@ -78,6 +79,7 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
     return {
       item,
       status: live?.status ?? item.status,
+      model: live ? subagentIconModel(live) : undefined,
       startedAt: live?.startedAt ?? item.startedAt,
       completedAt: live?.completedAt ?? item.completedAt,
     };
@@ -111,7 +113,7 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
           )}
         >
           <span className="flex shrink-0 items-center -space-x-1.5" aria-hidden>
-            {agents.slice(0, 3).map(({ item, status }) => (
+            {agents.slice(0, 3).map(({ item, status, model }) => (
               <EnvironmentSubagentAvatar
                 key={item.id}
                 environmentId={ctx.activeThreadEnvironmentId}
@@ -119,6 +121,7 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
                 driver={item.driver}
                 remote={item.remoteChild}
                 status={agents.length === 1 ? status : undefined}
+                model={model}
               />
             ))}
             {agents.length > 3 ? (
@@ -145,7 +148,7 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
             aria-hidden
             className={cn(
               "size-3.5 shrink-0 text-muted-foreground transition-transform",
-              expanded && "rotate-180",
+              !expanded && "-rotate-90",
             )}
           />
         </CollapsibleTrigger>

@@ -28,6 +28,7 @@ import {
 import { ThreadHoverCard } from "../ThreadHoverCard";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+import { subagentIconModel } from "./providerIconUtils";
 import { cn } from "~/lib/utils";
 import { deriveProviderInstanceEntries, shouldShowInstanceBadge } from "../../providerInstances";
 
@@ -61,6 +62,7 @@ export function SubagentTooltipContent(props: {
     modelSlug,
     workspace: metadata,
   } = resolveSubagentMetadata({ ...props, modelSelection: childSelection }, messages);
+  const iconModel = subagentIconModel({ model: props.model, modelSelection: childSelection });
   const hasProjectRow =
     props.parentThread !== undefined &&
     props.childProject !== undefined &&
@@ -136,6 +138,7 @@ export function SubagentTooltipContent(props: {
         {driver ? (
           <ProviderInstanceIcon
             driverKind={driver}
+            {...(iconModel ? { model: iconModel } : {})}
             displayName={entry?.displayName ?? props.provider?.displayName ?? driver}
             accentColor={entry?.accentColor}
             acpRegistryIconUrl={props.provider?.iconUrl}

@@ -221,7 +221,7 @@ function DeviceHostEditorForm({
                   </span>
                   {results ? (
                     <ChevronDownIcon
-                      className={`size-3 shrink-0 ${checksOpen ? "rotate-180" : ""}`}
+                      className={`size-3 shrink-0 ${checksOpen ? "" : "-rotate-90"}`}
                     />
                   ) : null}
                 </CollapsibleTrigger>
