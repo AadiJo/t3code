@@ -525,7 +525,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? [gt("In-app notifications")]
       : []),
     ...(settings.notificationInboxEnabled !== DEFAULT_UNIFIED_SETTINGS.notificationInboxEnabled
-      ? ["Notification inbox"]
+      ? [gt("Notification inbox")]
+      : []),
+    ...(settings.appIconBadgeEnabled !== DEFAULT_UNIFIED_SETTINGS.appIconBadgeEnabled
+      ? [gt("App icon badge")]
       : []),
     ...(settings.sidebarProjectGroupingMode !== DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode
       ? [gt("Project Grouping")]
@@ -705,6 +708,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       inAppNotificationsEnabled: DEFAULT_UNIFIED_SETTINGS.inAppNotificationsEnabled,
       notificationInboxEnabled: DEFAULT_UNIFIED_SETTINGS.notificationInboxEnabled,
+      appIconBadgeEnabled: DEFAULT_UNIFIED_SETTINGS.appIconBadgeEnabled,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       persistComposerContextStrip: DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip,
       diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
@@ -877,6 +881,25 @@ export function GeneralSettingsPanel() {
                   updateSettings({ notificationInboxEnabled: Boolean(checked) })
                 }
                 aria-label={gt("Notification inbox")}
+              />
+            }
+          />
+        ) : null}
+        {isElectron ? (
+          <SettingsRow
+            {...setting("app-icon-badge")}
+            description={
+              <T>
+                Show the number of unread notifications on the T3 Code icon in the Dock or taskbar.
+              </T>
+            }
+            control={
+              <Switch
+                checked={settings.appIconBadgeEnabled}
+                onCheckedChange={(checked) =>
+                  updateSettings({ appIconBadgeEnabled: Boolean(checked) })
+                }
+                aria-label={gt("App icon badge")}
               />
             }
           />

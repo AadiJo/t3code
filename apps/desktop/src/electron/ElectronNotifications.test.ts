@@ -5,7 +5,10 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 import {
+  type ClientSettings,
+  DEFAULT_CLIENT_SETTINGS,
   DesktopNotification as DesktopNotificationSchema,
   EnvironmentId,
   ThreadId,
@@ -23,6 +26,7 @@ import * as Channels from "../ipc/channels.ts";
 import { emptyNotificationState, NotificationState } from "../notifications/model.ts";
 import { ElectronWindow } from "./ElectronWindow.ts";
 import { installElectronNotifications } from "./ElectronNotifications.ts";
+import * as DesktopClientSettings from "../settings/DesktopClientSettings.ts";
 
 const runtime = vi.hoisted(() => ({
   focused: false,
@@ -69,7 +73,10 @@ const encodeState = Schema.encodeSync(Schema.fromJsonString(NotificationState));
 const decodeState = Schema.decodeUnknownSync(Schema.fromJsonString(NotificationState));
 const decodeItems = Schema.decodeUnknownSync(Schema.Array(DesktopNotificationSchema));
 
-function harness(platform: NodeJS.Platform = "darwin") {
+function harness(
+  platform: NodeJS.Platform = "darwin",
+  savedSettings: Option.Option<ClientSettings> = Option.none(),
+) {
   runtime.focused = false;
   runtime.created = [];
   runtime.activate = null;
@@ -103,6 +110,7 @@ function harness(platform: NodeJS.Platform = "darwin") {
     Effect.provideService(FileSystem.FileSystem, fs),
     Effect.provide(Path.layer),
     Effect.provideService(HostProcess.Platform, platform),
+    Effect.provide(DesktopClientSettings.layerTest(savedSettings)),
     Effect.provideService(DesktopEnvironment, {
       clientSettingsPath: "/test/client-settings.json",
     } as DesktopEnvironment["Service"]),
@@ -147,9 +155,11 @@ function harness(platform: NodeJS.Platform = "darwin") {
     sync: (
       patch: Partial<DesktopNotificationThread> = {},
       notificationMode: NotificationMode = "notifications",
+      appIconBadge = true,
     ) =>
       invoke(Channels.SYNC_NOTIFICATIONS_CHANNEL, {
         notificationMode,
+        appIconBadge,
         environmentIds: [thread.environmentId],
         threads: [{ ...thread, ...patch }],
       }),
@@ -205,6 +215,24 @@ describe("native desktop notification delivery", () => {
         expect(runtime.show).not.toHaveBeenCalled();
         expect(decodeItems(yield* h.invoke(Channels.GET_NOTIFICATIONS_CHANNEL))).toHaveLength(1);
       }
+    }),
+  );
+  it.effect("keeps the Dock count at zero while the app icon badge is off", () =>
+    Effect.gen(function* () {
+      // Saved off: launch must not show the persisted unread count.
+      const h = harness(
+        "darwin",
+        Option.some({ ...DEFAULT_CLIENT_SETTINGS, appIconBadgeEnabled: false }),
+      );
+      yield* h.install();
+      expect(runtime.badge).toHaveBeenLastCalledWith(0);
+      yield* h.sync({}, "notifications", false);
+      yield* h.sync({ approval: true }, "notifications", false);
+      expect(runtime.badge).toHaveBeenLastCalledWith(0);
+      yield* h.sync({ approval: true }, "notifications", true);
+      expect(runtime.badge).toHaveBeenLastCalledWith(1);
+      yield* h.sync({ approval: true }, "notifications", false);
+      expect(runtime.badge).toHaveBeenLastCalledWith(0);
     }),
   );
   it.effect("persists reads, removes native entries, and prevents replay after restart", () =>

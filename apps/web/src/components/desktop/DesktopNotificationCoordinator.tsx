@@ -41,6 +41,7 @@ function EnvironmentNotifications({
 }) {
   const shell = useAtomValue(environmentShell.stateValueAtom(environmentId));
   const notificationMode = useClientSettings((settings) => settings.notificationMode);
+  const appIconBadge = useClientSettings((settings) => settings.appIconBadgeEnabled);
   const lastSent = useRef("");
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes this environment's notification state to the Electron main process over IPC
   useEffect(() => {
@@ -50,6 +51,7 @@ function EnvironmentNotifications({
     const now = new Date().toISOString();
     const payload = {
       notificationMode,
+      appIconBadge,
       environmentIds: [environmentId],
       threads: snapshot.threads.flatMap((rawThread): DesktopNotificationThread[] => {
         if (rawThread.lineage.relationshipToParent === "subagent") return [];
@@ -88,7 +90,7 @@ function EnvironmentNotifications({
         lastSent.current = "";
         console.error("Could not synchronize notifications.", error);
       });
-  }, [shell, environmentId, label, notificationMode, onScreenThreadId]);
+  }, [shell, environmentId, label, notificationMode, appIconBadge, onScreenThreadId]);
   return null;
 }
 
@@ -130,10 +132,11 @@ export function DesktopNotificationCoordinator() {
     }
   }, [items, recordThreadVisit]);
   const unreadCount = items.filter((item) => !item.read).length;
+  const appIconBadge = useClientSettings((settings) => settings.appIconBadgeEnabled);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- draws the inbox's unread count onto the Windows taskbar over IPC
   useEffect(() => {
-    if (ready) setInboxBadge(unreadCount);
-  }, [ready, unreadCount]);
+    if (ready) setInboxBadge(appIconBadge ? unreadCount : 0);
+  }, [ready, unreadCount, appIconBadge]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the route change is the thread open that clears its mark-unread memory
   useEffect(() => {
     // Opening a thread reads it, including a mark-unread left from before.

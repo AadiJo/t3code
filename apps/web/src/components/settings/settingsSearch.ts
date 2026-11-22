@@ -740,6 +740,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     desktopOnly: true,
   },
   {
+    id: "app-icon-badge",
+    title: msg("App icon badge"),
+    to: "/settings/general",
+    searchTerms: ["dock badge taskbar count unread number icon notifications macos windows"],
+    desktopOnly: true,
+  },
+  {
     id: "language",
     title: msg("Language"),
     to: "/settings/general",

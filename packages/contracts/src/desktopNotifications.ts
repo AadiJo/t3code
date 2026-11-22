@@ -61,6 +61,7 @@ export type DesktopNotificationThread = typeof DesktopNotificationThread.Type;
 
 export const DesktopNotificationSnapshot = Schema.Struct({
   notificationMode: NotificationMode,
+  appIconBadge: Schema.Boolean,
   // Only complete, connected environment snapshots can resolve missing threads.
   environmentIds: Schema.Array(EnvironmentId),
   threads: Schema.Array(DesktopNotificationThread),

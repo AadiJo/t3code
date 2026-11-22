@@ -32,6 +32,7 @@ const thread = (patch: Partial<DesktopNotificationThread> = {}): DesktopNotifica
 });
 const snapshot = (...threads: DesktopNotificationThread[]) => ({
   notificationMode: "notifications" as const,
+  appIconBadge: true,
   environmentIds: [environmentId],
   threads,
 });
@@ -360,7 +361,7 @@ describe("desktop notification lifecycle", () => {
     expect(
       reconcileNotifications(
         first.state,
-        { notificationMode: "notifications", environmentIds: [], threads: [] },
+        { notificationMode: "notifications", appIconBadge: true, environmentIds: [], threads: [] },
         now,
       ).state,
     ).toBe(first.state);
@@ -378,6 +379,7 @@ describe("desktop notification lifecycle", () => {
       emptyNotificationState(),
       {
         notificationMode: "notifications",
+        appIconBadge: true,
         environmentIds: [environmentId, remote],
         threads: [thread(), thread({ environmentId: remote })],
       },
@@ -387,6 +389,7 @@ describe("desktop notification lifecycle", () => {
       initial.state,
       {
         notificationMode: "notifications",
+        appIconBadge: true,
         environmentIds: [environmentId, remote],
         threads: [thread({ input: true }), thread({ environmentId: remote, input: true })],
       },

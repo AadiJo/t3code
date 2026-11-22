@@ -1,5 +1,6 @@
 import { BrowserWindow, Notification, app } from "electron";
 import {
+  DEFAULT_CLIENT_SETTINGS,
   DesktopNotification,
   DesktopNotificationCommand,
   DesktopNotificationSnapshot,
@@ -14,6 +15,7 @@ import * as Option from "effect/Option";
 import * as DateTime from "effect/DateTime";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { DesktopEnvironment } from "../app/DesktopEnvironment.ts";
+import { DesktopClientSettings } from "../settings/DesktopClientSettings.ts";
 import { ElectronWindow } from "./ElectronWindow.ts";
 import { DesktopIpc, makeIpcMethod, type DesktopIpcInvokeEvent } from "../ipc/DesktopIpc.ts";
 import * as Channels from "../ipc/channels.ts";
@@ -40,7 +42,8 @@ function windowsToastXml(input: { id: string; title: string; lines: readonly str
 
 /**
  * Owns saved unread state and native notifications for this desktop installation. macOS shows
- * the unread count on the Dock here; on Windows the renderer draws it as a taskbar overlay.
+ * the unread count on the Dock here, unless the app icon badge setting is off; on Windows the
+ * renderer draws it as a taskbar overlay.
  */
 export const installElectronNotifications = Effect.fn("desktop.notifications.install")(
   function* () {
@@ -49,6 +52,7 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const environment = yield* DesktopEnvironment;
+    const clientSettings = yield* DesktopClientSettings;
     const platform = yield* HostProcess.Platform;
     if (platform !== "darwin" && platform !== "win32") return;
     const mac = platform === "darwin";
@@ -67,6 +71,18 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
       }),
     );
     const native = new Map<string, Notification>();
+    // Read at launch so the Dock does not flash a count the user turned off; each sync updates it.
+    let appIconBadge = Option.match(
+      yield* clientSettings.get.pipe(Effect.orElseSucceed(Option.none)),
+      {
+        onNone: () => DEFAULT_CLIENT_SETTINGS.appIconBadgeEnabled,
+        onSome: (settings) => settings.appIconBadgeEnabled,
+      },
+    );
+    const applyDockBadge = () => {
+      if (mac)
+        app.setBadgeCount(appIconBadge ? state.items.filter((item) => !item.read).length : 0);
+    };
     // Windows reports a toast click both on the live object and through activation.
     const opened = new Set<string>();
     let pendingOpen: DesktopNotification | null = null;
@@ -99,7 +115,7 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
         native.delete(id);
       }
       state = next;
-      if (mac) app.setBadgeCount(unreadIds.size);
+      applyDockBadge();
       yield* send(Channels.NOTIFICATIONS_CHANGED_CHANNEL, state.items);
     });
     const open = (id: string) => {
@@ -144,7 +160,7 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
         if (id.startsWith("t3-work-")) open(id);
       });
     } else {
-      app.setBadgeCount(state.items.filter((item) => !item.read).length);
+      applyDockBadge();
       const history = yield* Effect.promise(() => Notification.getHistory()).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning("Could not restore Notification Center history.", cause).pipe(
@@ -200,6 +216,10 @@ export const installElectronNotifications = Effect.fn("desktop.notifications.ins
           lock.withPermit(
             Effect.gen(function* () {
               if (!(yield* authorized(event))) return;
+              if (snapshot.appIconBadge !== appIconBadge) {
+                appIconBadge = snapshot.appIconBadge;
+                applyDockBadge();
+              }
               const result = reconcileNotifications(
                 state,
                 snapshot,

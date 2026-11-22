@@ -1,5 +1,6 @@
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { ClientSettings } from "@t3tools/contracts/settings";
+import { getClientSettings } from "./hooks/useSettings";
 import { msg } from "gt-react";
 
 import completionUrl from "./assets/notification-completion.mp3";
@@ -91,7 +92,13 @@ export function setNotificationBadge(count: number) {
       originalFavicon = undefined;
     }
   }
-  if (!inboxBadge) void bridge?.setNotificationBadge({ count, image }).catch(() => undefined);
+  // The browser tab icon keeps its count; the setting is for the desktop app's icon.
+  const iconCount = getClientSettings().appIconBadgeEnabled ? count : 0;
+  if (!inboxBadge) {
+    void bridge
+      ?.setNotificationBadge({ count: iconCount, image: iconCount > 0 ? image : null })
+      .catch(() => undefined);
+  }
 }
 
 let audioContext: AudioContext | undefined;

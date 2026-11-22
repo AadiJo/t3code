@@ -12,7 +12,8 @@ in the app while it has focus, and as system notifications while it does not.
 Completed turns do not show popups while T3 Code has focus. They still appear in
 the notification menu and contribute to the thread's Done indicator while unread.
 
-The unread count shows on the Dock icon on macOS and on the taskbar icon on Windows. Open the
+The unread count shows on the Dock icon on macOS and on the taskbar icon on Windows. To hide it,
+turn off **App icon badge** in **Settings → General → Notifications**. Open the
 related thread or mark a notification as read to clear its unread state, remove its system
 notification, and reduce that count. Marking a completed turn as read also clears the thread's
 Done indicator. Settling or snoozing a thread marks its notifications as read. This does not
