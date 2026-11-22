@@ -436,9 +436,15 @@ export function startThreadNotifications(
     };
   };
 
+  let appliedIconBadge = getClientSettings().appIconBadgeEnabled;
   const onSettings = () => {
     applyMode();
     syncEnvironments();
+    const iconBadge = getClientSettings().appIconBadgeEnabled;
+    if (iconBadge !== appliedIconBadge) {
+      appliedIconBadge = iconBadge;
+      setNotificationBadge(pending.size);
+    }
   };
   const unsubscribeSettings = subscribeClientSettings(onSettings);
   const unsubscribeEnvironmentIds = registry.subscribe(

@@ -339,6 +339,13 @@ describe("ClientSettings notification inbox", () => {
       decodeClientSettingsPatch({ notificationInboxEnabled: true }).notificationInboxEnabled,
     ).toBe(true);
   });
+
+  it("keeps the app icon badge on by default and patchable", () => {
+    expect(decodeClientSettings({}).appIconBadgeEnabled).toBe(true);
+    expect(decodeClientSettingsPatch({ appIconBadgeEnabled: false }).appIconBadgeEnabled).toBe(
+      false,
+    );
+  });
 });
 
 describe("ClientSettings quit confirmation", () => {
