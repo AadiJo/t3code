@@ -84,8 +84,11 @@ describe("LocalApi", () => {
     const { createLocalApi } = await import("./localApi");
     const items = [{ id: "delete", label: "Delete" }] as const;
 
-    await expect(createLocalApi().contextMenu.show(items)).resolves.toBe("delete");
-    expect(showContextMenuFallbackMock).toHaveBeenCalledWith(items, undefined);
+    const position = { x: 10, y: 20 };
+    await expect(createLocalApi().contextMenu.show(items, position, "keyboard")).resolves.toBe(
+      "delete",
+    );
+    expect(showContextMenuFallbackMock).toHaveBeenCalledWith(items, position, "keyboard");
     expect(showContextMenu).not.toHaveBeenCalled();
   });
 });

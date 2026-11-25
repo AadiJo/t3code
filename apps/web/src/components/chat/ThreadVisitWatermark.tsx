@@ -5,21 +5,19 @@ import { type ScopedThreadRef } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
 import { environmentCatalog } from "../../connection/catalog";
+import { getDocumentActivity, subscribeDocumentActivity } from "../../lib/documentActivity";
 import { useUiStateStore } from "../../uiStateStore";
 import { environmentThreadShells, threadEnvironment } from "../../state/threads";
 
-// A background window does not count as a visit: a turn that finishes while
-// the user is elsewhere stays unread until the window has focus again.
-const windowFocusedAtom = Atom.make((get) => {
-  const sync = () => get.setSelf(document.hasFocus());
-  window.addEventListener("focus", sync);
-  window.addEventListener("blur", sync);
-  get.addFinalizer(() => {
-    window.removeEventListener("focus", sync);
-    window.removeEventListener("blur", sync);
-  });
-  return document.hasFocus();
-});
+const isDocumentViewed = () => {
+  const activity = getDocumentActivity();
+  return activity.visible && activity.focused;
+};
+
+const documentViewedAtom = Atom.make((get) => {
+  get.addFinalizer(subscribeDocumentActivity(() => get.setSelf(isDocumentViewed())));
+  return isDocumentViewed();
+}).pipe(Atom.withLabel("document-viewed"));
 
 const threadVisitTracker = createThreadVisitTracker({
   threadShellAtom: environmentThreadShells.threadShellAtom,
@@ -27,7 +25,7 @@ const threadVisitTracker = createThreadVisitTracker({
   visit: threadEnvironment.visit,
   markLocalVisit: (ref, visitedAt) =>
     useUiStateStore.getState().markThreadVisited(scopedThreadKey(ref), visitedAt),
-  viewingAtom: windowFocusedAtom,
+  viewingAtom: documentViewedAtom,
 });
 
 // The visit watermark is the one part of the chat view that follows the
