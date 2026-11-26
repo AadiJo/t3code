@@ -11,6 +11,8 @@ import type { DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
 
 export const PREVIEW_MINI_PLAYER_EDGE_GAP = 12;
 export const PREVIEW_MINI_PLAYER_CORNER_RADIUS = 12;
+/** A streamed tab's control row, drawn under the page at the player's width. */
+export const PREVIEW_MINI_PLAYER_FOOTER_HEIGHT = 32;
 // The mini-player shell straddles this webview at 47 and 49: above --z-sheet, under dialogs (50).
 export const PREVIEW_MINI_PLAYER_WEBVIEW_Z_INDEX = 48;
 const PREVIEW_MINI_PLAYER_DEFAULT_BOX = { width: 320, height: 320 } as const;

@@ -16,6 +16,8 @@ export interface ChatCanvasPreview {
   readonly position: PreviewMiniPlayerPosition | null;
   readonly source: PreviewMiniPlayerSize;
   readonly lastInteraction?: PreviewMiniPlayerState["lastInteraction"];
+  /** A strip drawn under the frame, such as a streamed tab's control row. */
+  readonly footerHeight?: number;
 }
 
 const GAP = 12;
@@ -57,7 +59,13 @@ export function resolveChatCanvasLayout({
   };
   let frame: PreviewMiniPlayerFrame | null = null;
   let overlapsChat = false;
-  if (preview && container.width > 0 && container.height > 0) {
+  const outer = container;
+  if (preview && outer.width > 0 && outer.height > 0) {
+    // The frame is laid out in a canvas shortened by its footer, so the footer always fits below it.
+    const container = {
+      width: outer.width,
+      height: Math.max(1, outer.height - Math.max(0, preview.footerHeight ?? 0)),
+    };
     frame = resolvePreviewMiniPlayerFrame({ ...preview, container });
     // Reserve a chat lane only if the preview still has room to drag.
     const minimumPreviewX =
@@ -65,7 +73,12 @@ export function resolveChatCanvasLayout({
       container.width <= padding + minChatWidth + frame.width + GAP * 2
         ? GAP
         : padding + minChatWidth + GAP;
-    if (preview.position === null) frame = { ...frame, y: container.height - frame.height - GAP };
+    // An unmoved player sits under the details card, aligned to its right edge, or else at the bottom.
+    if (preview.position === null) {
+      frame = detailsCard
+        ? { ...frame, x: detailsCard.right - frame.width, y: detailsCard.bottom + GAP }
+        : { ...frame, y: container.height - frame.height - GAP };
+    }
     if (preview.lastInteraction === "resize" && composerHeight > 0) {
       const laneWidth = Math.min(normalWidth, minChatWidth);
       const transitionWidth = Math.max(GAP, normalWidth - laneWidth);
@@ -146,7 +159,8 @@ export function resolveChatCanvasLayout({
       frame = {
         ...frame,
         ...clampPreviewMiniPlayerPosition(
-          preview.position ?? { x: frame.x, y: container.height - frame.height - GAP },
+          preview.position ??
+            (detailsCard ? frame : { x: frame.x, y: container.height - frame.height - GAP }),
           container,
           frame,
           obstacles,

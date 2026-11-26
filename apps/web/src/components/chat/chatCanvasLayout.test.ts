@@ -145,6 +145,39 @@ describe("chat canvas layout", () => {
     expect(result.overlapsDetailsCard).toBe(false);
     expect(result.chat).toEqual({ left: 424, width: 736, insetStart: 0, insetEnd: 0 });
   });
+  it("opens an unmoved preview under the details card, aligned to its right edge", () => {
+    const detailsCard = { left: 1260, right: 1572, bottom: 339 };
+    const result = resolveChatCanvasLayout({
+      container: { width: 1584, height: 988 },
+      maxChatWidth: 736,
+      composerHeight: 180,
+      detailsCard,
+      preview,
+    });
+    expect(result.frame).toMatchObject({ x: 1572 - 320, y: 339 + 12, width: 320, height: 200 });
+    expect(result.overlapsDetailsCard).toBe(false);
+    // Without the card it keeps the bottom corner.
+    const bottom = resolveChatCanvasLayout({
+      container: { width: 1584, height: 988 },
+      maxChatWidth: 736,
+      composerHeight: 180,
+      preview,
+    }).frame!;
+    expect(bottom.y + bottom.height).toBe(988 - 12);
+  });
+  it.each([
+    ["an unmoved", null],
+    ["a dragged", { x: 1200, y: 900 }],
+  ] as const)("leaves room for %s preview's footer above the canvas bottom", (_, position) => {
+    const footerHeight = 32;
+    const frame = resolveChatCanvasLayout({
+      container: { width: 1584, height: 988 },
+      maxChatWidth: 736,
+      composerHeight: 180,
+      preview: { ...preview, position, footerHeight },
+    }).frame!;
+    expect(frame.y + frame.height + footerHeight).toBeLessThanOrEqual(988 - 12);
+  });
   it("moves the chat left only as far as a details card it would crowd requires", () => {
     const { chat } = resolveChatCanvasLayout({
       container: { width: 1344, height: 988 },

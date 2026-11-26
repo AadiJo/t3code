@@ -69,6 +69,7 @@ import {
 } from "./previewMiniPlayerGesture";
 import {
   PREVIEW_MINI_PLAYER_CORNER_RADIUS,
+  PREVIEW_MINI_PLAYER_FOOTER_HEIGHT,
   PREVIEW_MINI_PLAYER_WEBVIEW_Z_INDEX,
   type PreviewMiniPlayerFrame,
   resolveDeviceMiniPlayerCornerRadius,
@@ -193,6 +194,8 @@ export function useThreadPreviewCanvasSource(
     width: miniPlayer.width,
     position: miniPlayer.position,
     lastInteraction: miniPlayer.lastInteraction,
+    footerHeight:
+      source.kind === "browser" && browser.serverTab ? PREVIEW_MINI_PLAYER_FOOTER_HEIGHT : 0,
     source:
       heldSource ??
       (source.kind === "browser"
@@ -288,6 +291,7 @@ function BrowserMiniPlayer({ threadRef, tabId, miniPlayer }: Props & { readonly 
       sourceSize={sourceSize}
       label={gt("Floating browser preview")}
       recording={recording}
+      footerHeight={serverTab ? PREVIEW_MINI_PLAYER_FOOTER_HEIGHT : 0}
       onOpenInPanel={openInPanel}
       pillActions={
         canPopOut ? (
@@ -447,6 +451,7 @@ function MiniPlayerShell({
   onOpenInPanel,
   pillActions,
   recording = false,
+  footerHeight = 0,
   cornerRadius = frameCornerRadius,
   children,
 }: {
@@ -457,6 +462,7 @@ function MiniPlayerShell({
   readonly onOpenInPanel: () => void;
   readonly pillActions?: ReactNode;
   readonly recording?: boolean;
+  readonly footerHeight?: number;
   readonly cornerRadius?: (frame: PreviewMiniPlayerSize) => number;
   readonly children: (frame: PreviewMiniPlayerFrame) => ReactNode;
 }) {
@@ -478,7 +484,13 @@ function MiniPlayerShell({
     document.addEventListener("pointerdown", dismiss, true);
     return () => document.removeEventListener("pointerdown", dismiss, true);
   }, [pillOpen]);
-  const container = canvas?.container ?? null;
+  // Gestures move the frame in the canvas the layout used: shortened so the footer fits below.
+  const container = canvas?.container
+    ? {
+        width: canvas.container.width,
+        height: Math.max(1, canvas.container.height - footerHeight),
+      }
+    : null;
   const sourceKey = previewMiniPlayerSourceKey(miniPlayer.source);
   const heldSourceKey = streamedSourceKey(threadRef, sourceKey);
   const frame = canvas?.previewKey === sourceKey ? canvas.layout.frame : null;
@@ -606,7 +618,7 @@ function MiniPlayerShell({
             left: frame.x,
             top: frame.y,
             width: frame.width,
-            height: frame.height,
+            height: frame.height + footerHeight,
             borderRadius: radius,
           }}
         >
