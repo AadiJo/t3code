@@ -782,8 +782,9 @@ export function ServerBrowserSurface(props: {
     >
       <div
         className={cn(
-          "visible relative z-20 flex shrink-0 items-center justify-between gap-2 border-border bg-background px-2 py-1",
-          controlPosition === "bottom" ? "order-last border-t" : "border-b",
+          "visible relative z-20 flex shrink-0 items-center justify-between gap-2 border-border bg-background px-2",
+          // Below the page it is a fixed-height footer, so the page keeps its own shape above it.
+          controlPosition === "bottom" ? "order-last h-8 border-t" : "border-b py-1",
         )}
       >
         <span role="status" className="text-xs text-muted-foreground">
